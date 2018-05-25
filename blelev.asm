@@ -205,6 +205,32 @@ zera_valor: ; ponteiro está em bx
     		ret
 ;**** fim_zera_valor ****
 
+;**** acende_button_led ****
+; essa função acende o led de algum botão. Para utilizar a função, faça:
+; mov al,NUMERO_DO_LED_A_SER_ACESO
+; call acende_button_led
+acende_button_led:    ;led a ser aceso está em al ; mov al,LED ; call acende_button_led
+        push ax
+        push cx
+        push dx
+
+        mov ah,0
+        dec al ; decrementa para fazer o shift
+        xor cx,cx
+        mov cl,al
+        mov al,1
+        shl ax,cl
+        or byte[motoreleds],al ; altera o vetor motoreleds para ligar o bit do led desejado
+        mov al,byte[motoreleds]
+        mov dx,318h
+        out dx,al
+
+        pop dx
+        pop cx
+        pop ax
+        ret
+
+;**** acende_button_led ****
 
 segment data
 ; --------------- Variáveis de desenho --------------
