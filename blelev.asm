@@ -8,7 +8,6 @@ segment code
     		mov 		ax,stack
     		mov 		ss,ax
     		mov 		sp,stacktop
-; oi sou eu
         mov byte[motoracao],1
         call move_motor
         mov    	ah,08h ; fica esperando dar enter para finalizar o programa
