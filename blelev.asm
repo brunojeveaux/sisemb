@@ -1,6 +1,7 @@
-; Aluno: Bruno Teixeira Jeveaux
+; --------------------------------------------------------
+; Alunos: Bruno Teixeira Jeveaux e Laila Sindra Ribeiro
 ; Turma: 01
-; ----------------------------
+; --------------------------------------------------------
 segment code
 ..start:
     	mov 		ax,data
@@ -9,19 +10,25 @@ segment code
     	mov 		ss,ax
     	mov 		sp,stacktop
 	
-	ler_sensor:
-	mov 	dx,319h
+	; TO DO LIST
+	; QUANDO FIZER PARADA DE ELEVADOR, SUBIR UM POUQUINHO ATÉ sensor_atual = 0!!! DEPOIS PARAR MESMO.
+	
+	
+	
+	
+	ler_sensor:		; le o sensor de andar e incrementa ou decrementa o andar de acordo com o necessário
+	mov 		dx,319h
 	in		dx,al
-	mov 	byte[entrada],al
-	xor 	ah,ah
+	mov 		byte[entrada],al
+	xor 		ah,ah
 	mov		al,byte[motoreleds]			
 	shr		ax,6
-	test	byte[leitura+di],01000000b	; leitura+di para testes ; entrada para func normal
+	test		byte[entrada],01000000b
 	jz 		buraco
-	jmp 	obstruido
+	jmp 		obstruido
 	buraco:			; se mudar de 1 pra zero e estava subindo, incrementa o andar. Se não, continua o que estava fazendo.
 	mov		byte[sensor_new],0
-	test 	byte[sensor_old],1
+	test 		byte[sensor_old],1
 	jz 		continua
 	cmp		al,0	; parado
 	je		continua
@@ -33,33 +40,26 @@ segment code
 	je		continua
 	obstruido:		; se mudar de zero pra 1 e estava descendo, decrementa o andar. Se não, continua o que estava fazendo.
 	mov		byte[sensor_new],1
-	test	byte[sensor_old],1
+	test		byte[sensor_old],1
 	jnz	 	continua
 	cmp		al,0	; parado
 	je		continua
 	cmp		al,1	; subindo
 	je	 	continua
-	cmp 	al,2	; descendo
+	cmp 		al,2	; descendo
 	je	 	decrementa_andar
 	cmp		al,3	; parado
 	je		continua
 	incrementa_andar:
 	inc		byte[andar_atual]
-	jmp 	continua
+	jmp 		continua
 	decrementa_andar:
-	dec 	byte[andar_atual]
+	dec 		byte[andar_atual]
 	continua:
 	mov		al,byte[sensor_new]
-	mov 	byte[sensor_old],al
+	mov 		byte[sensor_old],al
 	
-	mov		al,byte[andar_atual]
-	add		al,'0'
-	mov 	byte[andar_str],al
-	mov 	dx,andar_str
-	mov 	ah,09h
-	int 	21h
-	inc		di					; para testes
-	loop 	ler_sensor			; para testes
+	
 	
         mov    	ah,08h ; fica esperando dar enter para finalizar o programa
 	int     21h
@@ -69,9 +69,14 @@ saida:
 	mov 	ax,4c00h
 	int		21h
 	
+; ---------------------------- FIM DO PROGRAMA PRINCIPAL ----------------------------
 
+; -------------- Funções --------------
 
-move_motor: ; em motoracao está o comando desejado para o motor (0 parado, 1 subida, 2 descida, 3 parado)
+; **** move_motor ****
+; salve em motoracao o comando desejado para o motor (0 parado, 1 subida, 2 descida, 3 parado)
+; mov byte[motoracao],VALOR ; call move_motor
+move_motor:
         push ax
         push cx
         push dx ; salva o contexto
@@ -103,7 +108,9 @@ move_motor: ; em motoracao está o comando desejado para o motor (0 parado, 1 su
         pop cx
         pop ax
         ret
+; **** fim_move_motor ****
 
+; **** conta_tempo ****
 conta_tempo:
         cmp byte[tempo],255
         jb incrementa_tempo
@@ -112,6 +119,9 @@ conta_tempo:
         incrementa_tempo:
         inc byte[tempo]
         ret
+; **** fim_conta_tempo ****
+
+; **** verifica_andar ****
 verifica_andar:
         push ax
 
@@ -130,7 +140,8 @@ verifica_andar:
 
         pop ax
         ret
-
+	
+;**** printa_inteiro ****
 printa_inteiro: ; em ax está o inteiro que queremos printar
         push ax
         push bx
@@ -160,6 +171,9 @@ printa_inteiro: ; em ax está o inteiro que queremos printar
         pop bx
         pop ax
         ret
+;**** fim_printa_inteiro ****	
+	
+;**** printa_string ****	
 printa_string:
         push ax
         push dx
@@ -174,6 +188,9 @@ printa_string:
         pop dx
         pop ax
         ret
+;**** fim_printa_string ****	
+	
+;**** zera_valor ****	
 zera_valor: ; ponteiro está em bx
     		push di
     		mov di,0
@@ -186,21 +203,26 @@ zera_valor: ; ponteiro está em bx
     termina_zerar:
     		pop di
     		ret
+;**** fim_zera_valor ****
+
 
 segment data
-
-motoreleds		db  00000000b ; bits 7 e 6 são os motores 0 0 Parado; 0 1 Sobe; 1 0 Desce; 1 1 Parado
-motoracao   		db  0
-andar_atual 		db  1
-andar_desejado 		db  4
-entrada			db		00000000b	; valores lidos da porta 319h (bit 6 é o sensor)
-sensor_old		db		0		; 0 -> buraco, 1 -> ostruido
-sensor_new		db		0			
-str_			db		'fim dados'
-; testes
-tempo   db    0
-teste  db    '0000$'
-crlf   db     13,10,'$'
+; --------------- Variáveis de desenho --------------
+; --------------- Variáveis de controle --------------
+	motoreleds		db  00000000b ; bits 7 e 6 são os motores 0 0 Parado; 0 1 Sobe; 1 0 Desce; 1 1 Parado
+	motoracao   		db  0
+	andar_atual 		db  1
+	andar_desejado 		db  4
+	entrada			db		00000000b	; valores lidos da porta 319h (bit 6 é o sensor)
+	sensor_old		db		0		; 0 -> buraco, 1 -> ostruido
+	sensor_new		db		0		
+; -------------- Mensagens e strings --------------
+	str_			db		'fim dados'
+; -------------- Variáveis para testes --------------
+	; testes
+	tempo   db    0
+	teste  db    '0000$'
+	crlf   db     13,10,'$'
 segment stack stack
-    		resb 		512
+	resb 		512
 stacktop:
