@@ -31,27 +31,33 @@ segment code
     int     10h
 ; calibração
     call    desenha_calibrando
+    call    subir
 espera:
+    call    verifica_tecsaida
     cmp     byte[flag_espaco],1
-    je      modo_operacao
-    jmp     espera
-modo_operacao:
+    jne     espera
+    call    descer
+ajusta_4andar:
+    call    verifica_tecsaida
+;   call    ler_sensor              ; CONCERTAR LER SENSOR
+    mov     ax,'0'
+    mov     dh,10
+    mov     dl,20
+    call cursor
+    add     al,byte[andar_atual]
+    call caracter
+    cmp     byte[andar_atual],4
+    jne     ajusta_4andar
     mov     byte[flag_calibrando],0
+    call    parar
 ; deixa o fundo preto
     call    background
     call    desenha_menu
-    mov byte[andar_atual],4
-    call atualiza_menu
-    mov byte[andar_atual],1
-    mov byte[flag_emergencia],1
-    call atualiza_menu
-    mov byte[andar_atual],1
-    mov byte[flag_emergencia],1
-    call atualiza_menu
-    mov byte[andar_atual],1
-    mov byte[flag_emergencia],1 ;;;; TEM QUE DESCOBRIR POR QUE ELE ESTÁ ALTERNANDO PRA MODO FUNCIONANDO TODA VEZ Q EXECUTA ATUALIZA_MENU DE NOVO
-    call atualiza_menu
+;    mov    byte[andar_atual],4
+    call    atualiza_menu
 loop_teste:
+    call    verifica_tecsaida
+    call    atualiza_menu
     jmp     loop_teste
 
 
@@ -90,7 +96,13 @@ inttec:
     out     pictrl,al
     mov     al,byte[tecla]
     cmp     al,tec_q                ; tecla q no teclado
-    je      sai
+    ;je      sai
+    je      set_saida
+    jmp     continua_inttec
+    set_saida:
+    mov     byte[flag_saida],1
+    jmp     sai_inttec
+    continua_inttec:
     ; verifica se esta calibrando
     test    byte[flag_calibrando],1
     jz      verifica_numeros
@@ -120,13 +132,13 @@ inttec:
     je      tecla_quatro
     jmp     sai_inttec
     tecla_esc:
-    test byte[flag_emergencia],1
-    jz  modo_emergencia
+    test    byte[flag_emergencia],1
+    jz      modo_emergencia
     mov     byte[flag_emergencia],0 ; se estava em emergência, agora não está mais
-    jmp sai_inttec
+    jmp     sai_inttec
     modo_emergencia:
     mov     byte[flag_emergencia],1 ; se não estava em emergência, agora está
-    jmp sai_inttec
+    jmp     sai_inttec
     tecla_um:
     mov     byte[flag_um],1
     jmp     sai_inttec
@@ -144,6 +156,16 @@ inttec:
 ; **************************************** Fim do programa principal ****************************************
 
 ; --------------- Procedimentos ---------------
+
+; ***** verifica_tecsaida *****
+; verifica se a tecla Q foi apertada
+verifica_tecsaida:
+    cmp     byte[flag_saida],1
+    jne     sai_verifica_tecsaida
+    jmp sai
+    sai_verifica_tecsaida:
+    ret
+; ##### end_verifica_tecsaida #####
 
 ; ***** line *****
 ; desenha uma linha
@@ -909,7 +931,6 @@ pinta_seta_dupla_interna:
     ret
 ; ##### end_pinta_seta_dupla_interna #####
 
-
 ; ***** atualiza_menu *****
 ; essa função atualiza o menu. Para utilizar a função, faça:
 ; call atualiza_menu
@@ -921,78 +942,71 @@ atualiza_menu:
     push    di
 
     ; LIMPA ANDAR ANTERIOR
-    mov dh,3 ; linha
-    mov dl,17 ; coluna
-    call cursor
-    mov al,'0'
-    add al,byte[andar_anterior]
-    call caracter ; quando escreve de novo ele inverte a cor (branco pra preto)
-
+    mov     dh,3 ; linha
+    mov     dl,17 ; coluna
+    call    cursor
+    mov     al,'0'
+    add     al,byte[andar_anterior]
+    call    caracter ; quando escreve de novo ele inverte a cor (branco pra preto)
     ; ESCREVE ANDAR ATUAL
-    mov dh,3 ; linha
-    mov dl,17 ; coluna
-    call cursor
-    mov al,'0'
-    add al,byte[andar_atual]
-    call caracter
-
+    ; mov   dh,3 ; linha
+    ; mov   dl,17 ; coluna
+    ; call cursor
+    mov     al,'0'
+    add     al,byte[andar_atual]
+    call    caracter
     ; LIMPA ESTADO DO ELEVADOR
-    mov di,word[ptr_str_estado_anterior]
-    mov dh,4
-    mov dl,24
-    call cursor
-    call escrever
-
+    mov     di,word[ptr_str_estado_anterior]
+    mov     dh,4
+    mov     dl,24
+    call    cursor
+    call    escrever
     ; ESCREVE ESTADO DO ELEVADOR
-    xor 		ah,ah
-  	mov		al,byte[motoreleds]
-  	shr		ax,6
-    cmp		al,0	; parado
-  	je		escreve_parado
-  	cmp		al,1	; subindo
-  	je	 	escreve_subindo
-  	cmp 		al,2	; descendo
-  	je	 	escreve_descendo
-  	cmp		al,3	; parado
-  	je		escreve_parado
-
+    xor     ah,ah
+    mov     al,byte[motoreleds]
+    shr     ax,6
+    cmp     al,0    ; parado
+    je      escreve_parado
+    cmp     al,1    ; subindo
+    je      escreve_subindo
+    cmp     al,2    ; descendo
+    je      escreve_descendo
+    cmp     al,3    ; parado
+    je      escreve_parado
     escreve_parado:
-    mov di,str_parado
-    mov word[ptr_str_estado_anterior],di
-    jmp termina_escrever
+    mov     di,str_parado
+    jmp     termina_escrever
     escreve_subindo:
-    mov di,str_subindo
-    mov word[ptr_str_estado_anterior],di
-    jmp termina_escrever
+    mov     di,str_subindo
+    jmp     termina_escrever
     escreve_descendo:
-    mov di,str_descendo
-    mov word[ptr_str_estado_anterior],di
-
+    mov     di,str_descendo
     termina_escrever:
-    mov dh,4
-    mov dl,24
-    call cursor
-    call escrever
-
+    mov     word[ptr_str_estado_anterior],di    
+    mov     dh,4
+    mov     dl,24
+    call    cursor
+    call    escrever
     ; LIMPA MODO DO ELEVADOR
-    mov di,word[ptr_str_modo_anterior]
-    mov dh,5
-    mov dl,22
-    call cursor
-    call escrever
+    mov     di,word[ptr_str_modo_anterior]
+    mov     dh,5
+    mov     dl,22
+    call    cursor
+    call    escrever
     ; ESCREVE MODO DO ELEVADOR
-    mov di,str_funcionando
-    test byte[flag_emergencia],1
-    jz termina_atualizar
-    mov di,str_emergencia ; se der 1, significa que está em emergência
+    mov     di,str_funcionando
+    test    byte[flag_emergencia],1
+    jz      termina_atualizar
+    mov     di,str_emergencia ; se der 1, significa que está em emergência
     termina_atualizar:
+    mov     word[ptr_str_modo_anterior],di
     mov dh,5
     mov dl,22
     call cursor
     call escrever
     mov al,byte[andar_atual]
     mov byte[andar_anterior],al
-
+    ; retorno
     pop     di
     pop     dx
     pop     cx
@@ -1001,8 +1015,95 @@ atualiza_menu:
     ret
 ; ##### end_atualiza_menu #####
 
+; ***** subir *****
+; move motor para cima
+subir:
+    mov     byte[motoracao],1
+    call    move_motor
+    ret
+; ##### end_subir #####
 
+; ***** descer *****
+; move motor para baixo
+descer:
+    mov     byte[motoracao],2
+    call    move_motor
+    ret
+; ##### end_descer #####
 
+; ***** parar *****
+; para o motor
+parar:
+    mov     byte[motoracao],0
+    call    move_motor
+    ret
+; ##### end_parar #####
+
+; ***** move_motor *****
+; salve em motoracao o comando desejado para o motor (0 parado, 1 subida, 2 descida, 3 parado)
+; mov byte[motoracao],VALOR ; call move_motor
+move_motor:
+    push    ax
+    push    dx              ; salva o contexto;
+    mov     al,byte[motoreleds]
+    mov     ah,byte[motoracao]
+    shl     ah,6            ; shifta o dado para termos: XX000000
+    and     al,00111111b    ; zera os bits 6 e 7 dos motores para dar o comando
+    or      al,ah           ; mantém os bits 0 a 5 e dá o comando desejado
+    mov     byte[motoreleds],al
+    mov     dx,318h
+    out     dx,al
+    ; recupera o contexto
+    pop     dx
+    pop     ax
+    ret
+; ##### fim_move_motor #####
+
+;
+ler_sensor:     ; le o sensor de andar e incrementa ou decrementa o andar de acordo com o necessário
+    mov     dx,319h
+    in      al,dx
+    mov     byte[entrada],al
+    xor     ah,ah
+    mov     al,byte[motoreleds]         
+    shr     ax,6
+    test    byte[entrada],01000000b
+    jz      buraco
+    jmp     obstruido
+    buraco:         ; se mudar de 1 pra zero e estava subindo, incrementa o andar. Se não, continua o que estava fazendo.
+    mov     byte[sensor_new],0
+    test    byte[sensor_old],1
+    jz      continua
+    cmp     al,0    ; parado
+    je      continua
+    cmp     al,1    ; subindo
+    je      incrementa_andar
+    cmp     al,2    ; descendo
+    je      continua
+    cmp     al,3    ; parado
+    je      continua
+    obstruido:      ; se mudar de zero pra 1 e estava descendo, decrementa o andar. Se não, continua o que estava fazendo.
+    mov     byte[sensor_new],1
+    test        byte[sensor_old],1
+    jnz     continua
+    cmp     al,0    ; parado
+    je      continua
+    cmp     al,1    ; subindo
+    je      continua
+    cmp         al,2    ; descendo
+    je      decrementa_andar
+    cmp     al,3    ; parado
+    je      continua
+    incrementa_andar:
+    inc     byte[andar_atual]
+    jmp         continua
+    decrementa_andar:
+    dec         byte[andar_atual]
+    continua:
+    mov     al,byte[sensor_new]
+    mov         byte[sensor_old],al
+    ret
+;
 
 ; --------------- Segmento de Dados ---------------
 segment data
@@ -1036,16 +1137,16 @@ deltay          dw      0
 ; coordenadas de desenho - pontos a serem enviados para a função line, para evitar código looongo
 coo_borda       dw      10,10,630,10,630,10,630,470,630,470,10,470,10,470,10,10,'$'
 coo_casinhas    dw      384,10,384,470,507,10,507,470,384,102,630,102,384,194,630,194,384,286,630,286,384,378,630,378,'$'
-coo_limpeza		dw		131,380,300,437,'$'
+coo_limpeza     dw      131,380,300,437,'$'
 ; --------------- Variáveis de controle --------------
-	motoreleds		db  00000000b ; bits 7 e 6 são os motores 0 0 Parado; 0 1 Sobe; 1 0 Desce; 1 1 Parado
-	motoracao   		db  0
-	andar_atual 		db  4
-  andar_anterior 		db  4
-	andar_desejado 		db  4
-	entrada			db		00000000b	; valores lidos da porta 319h (bit 6 é o sensor)
-	sensor_old		db		0		; 0 -> buraco, 1 -> ostruido
-	sensor_new		db		0
+motoreleds      db      00000000b   ; bits 7 e 6 são os motores 0 0 Parado; 0 1 Sobe; 1 0 Desce; 1 1 Parado
+motoracao       db      0
+andar_atual     db      5
+andar_anterior  db      4
+andar_desejado  db      4
+entrada         db      00000000b   ; valores lidos da porta 319h (bit 6 é o sensor)
+sensor_old      db      0           ; 0 -> buraco, 1 -> ostruido
+sensor_new      db      0
 ; --------------- Variáveis de mensagens ---------------
 str_apertaespaco db     'Aperte ESPACO no quarto andar','$'
 str_calibrando  db      'Calibrando elevador...','$'
@@ -1059,13 +1160,13 @@ str_modo_operacao db    'Modo de operacao: ','$'
 str_chamadas    db      'Chamadas','$'
 str_internas    db      'INTERNAS','$'
 str_externas    db      'EXTERNAS','$'
-str_parado    db      'Parado','$'
-str_subindo    db      'Subindo','$'
+str_parado      db      'Parado','$'
+str_subindo     db      'Subindo','$'
 str_descendo    db      'Descendo','$'
-str_funcionando    db      'Funcionando','$'
-str_emergencia    db      'Emergencia','$'
-ptr_str_estado_anterior dw  str_parado
-ptr_str_modo_anterior dw  str_funcionando
+str_funcionando db      'Funcionando','$'
+str_emergencia  db      'Emergencia','$'
+ptr_str_estado_anterior dw str_parado
+ptr_str_modo_anterior dw str_funcionando
 ; --------------- Leitura dos sensores e atuadores ---------------
 
 
@@ -1073,6 +1174,7 @@ ptr_str_modo_anterior dw  str_funcionando
 ; --------------- flags ---------------
 flag_calibrando db      1           ; indica que está calibrando
 flag_espaco     db      0           ; indica se apertou espaco
+flag_saida      db      0           ; indica se apertou Q
 flag_um         db      0           ; indica se apertou andar 1
 flag_dois       db      0           ; indica se apertou andar 2
 flag_tres       db      0           ; indica se apertou andar 3
