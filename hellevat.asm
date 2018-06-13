@@ -36,28 +36,15 @@ espera:
     call    verifica_tecsaida
     cmp     byte[flag_espaco],1
     jne     espera
-    call    descer
-ajusta_4andar:
     call    verifica_tecsaida
-;   call    ler_sensor              ; CONCERTAR LER SENSOR
-    mov     ax,'0'
-    mov     dh,10
-    mov     dl,20
-    call cursor
-    add     al,byte[andar_atual]
-    call caracter
-    cmp     byte[andar_atual],4
-    jne     ajusta_4andar
-    mov     byte[flag_calibrando],0
-    call    parar
+    call    ajusta_4andar   ; TESTAR ISSO
 ; deixa o fundo preto
     call    background
     call    desenha_menu
-;    mov    byte[andar_atual],4
+    mov     byte[andar_atual],4
     call    atualiza_menu
 loop_teste:
     call    verifica_tecsaida
-    call    atualiza_menu
     jmp     loop_teste
 
 
@@ -157,16 +144,6 @@ inttec:
 
 ; --------------- Procedimentos ---------------
 
-; ***** verifica_tecsaida *****
-; verifica se a tecla Q foi apertada
-verifica_tecsaida:
-    cmp     byte[flag_saida],1
-    jne     sai_verifica_tecsaida
-    jmp sai
-    sai_verifica_tecsaida:
-    ret
-; ##### end_verifica_tecsaida #####
-
 ; ***** line *****
 ; desenha uma linha
 ; push x1; push y1; push x2; push y2; call line;  (x<639, y<479)
@@ -218,7 +195,6 @@ line1:                  ;deltax <>0
 line32:
     mov     [deltay],dx
     pop     dx
-
     push    ax
     mov     ax,[deltax]
     cmp     ax,[deltay]
@@ -436,6 +412,16 @@ escrever:
 fim_escrever:
     ret
 ; ##### fim_escrever #####
+
+; ***** verifica_tecsaida *****
+; verifica se a tecla Q foi apertada
+verifica_tecsaida:
+    cmp     byte[flag_saida],1
+    jne     sai_verifica_tecsaida
+    jmp sai
+    sai_verifica_tecsaida:
+    ret
+; ##### end_verifica_tecsaida #####
 
 ; ***** desenha_calibrando *****
 ; desenha a tela de calibracao
@@ -734,34 +720,34 @@ desenha_menu:
     call    cursor
     mov     di,str_andar_atual
     call    escrever
-    mov dh,3 ; linha
-    mov dl,17 ; coluna
-    call cursor
-    mov al,'0'
-    add al,4
-    call caracter
+    mov     dh,3 ; linha
+    mov     dl,17 ; coluna
+    call    cursor
+    mov     al,'0'
+    add     al,4
+    call    caracter
     ; escreve estado do elevador
     mov     dh,4
     mov     dl,4
     call    cursor
     mov     di,str_estado_elevador
     call    escrever
-    mov di,str_parado
-    mov dh,4
-    mov dl,24
-    call cursor
-    call escrever
+    mov     di,str_parado
+    mov     dh,4
+    mov     dl,24
+    call    cursor
+    call    escrever
     ; escreve modo_operacao
     mov     dh,5
     mov     dl,4
     call    cursor
     mov     di,str_modo_operacao
     call    escrever
-    mov di,str_funcionando
-    mov dh,5
-    mov dl,22
-    call cursor
-    call escrever
+    mov     di,str_funcionando
+    mov     dh,5
+    mov     dl,22
+    call    cursor
+    call    escrever
     ; escreve para sair...
     mov     dh,23
     mov     dl,3
@@ -940,7 +926,6 @@ atualiza_menu:
     push    cx
     push    dx
     push    di
-
     ; LIMPA ANDAR ANTERIOR
     mov     dh,3 ; linha
     mov     dl,17 ; coluna
@@ -1025,6 +1010,7 @@ subir:
 
 ; ***** descer *****
 ; move motor para baixo
+; call descer
 descer:
     mov     byte[motoracao],2
     call    move_motor
@@ -1059,51 +1045,124 @@ move_motor:
     ret
 ; ##### fim_move_motor #####
 
-;
-ler_sensor:     ; le o sensor de andar e incrementa ou decrementa o andar de acordo com o necessário
+; ***** ler_sensor_botoes *****
+; armazena o valor lido da porta 319h em entrada e diz se o sensor de andar estava em buraco ou obstruido
+; call ler_sensor_botoes
+ler_sensor_botoes:
+    push    ax
+    push    dx
+    pushf
     mov     dx,319h
     in      al,dx
     mov     byte[entrada],al
-    xor     ah,ah
-    mov     al,byte[motoreleds]         
-    shr     ax,6
-    test    byte[entrada],01000000b
-    jz      buraco
-    jmp     obstruido
-    buraco:         ; se mudar de 1 pra zero e estava subindo, incrementa o andar. Se não, continua o que estava fazendo.
-    mov     byte[sensor_new],0
-    test    byte[sensor_old],1
-    jz      continua
-    cmp     al,0    ; parado
-    je      continua
-    cmp     al,1    ; subindo
-    je      incrementa_andar
-    cmp     al,2    ; descendo
-    je      continua
-    cmp     al,3    ; parado
-    je      continua
-    obstruido:      ; se mudar de zero pra 1 e estava descendo, decrementa o andar. Se não, continua o que estava fazendo.
-    mov     byte[sensor_new],1
-    test        byte[sensor_old],1
-    jnz     continua
-    cmp     al,0    ; parado
-    je      continua
-    cmp     al,1    ; subindo
-    je      continua
-    cmp         al,2    ; descendo
-    je      decrementa_andar
-    cmp     al,3    ; parado
-    je      continua
-    incrementa_andar:
-    inc     byte[andar_atual]
-    jmp         continua
-    decrementa_andar:
-    dec         byte[andar_atual]
-    continua:
-    mov     al,byte[sensor_new]
-    mov         byte[sensor_old],al
+    test    al,01000000b
+    jz      sensor_0
+    mov     byte[sensor],1
+    sensor_0:
+    mov     byte[sensor],0
+    popf
+    pop     dx
+    pop     ax
     ret
-;
+; ##### fim_ler_sensor #####
+
+; ***** ajusta_4andar *****
+; desce enquanto não ver que o sensor da "buraco" 10 vezes seguidas
+; call ajusta_4andar
+ajusta_4andar:
+    push    ax
+    pushf
+    call    descer
+    xor     al,al   ; al contara numero de buracos
+    xor     ah,ah   ; ah contara numero de obstruidos
+    loop_ajusta:
+    call    ler_sensor_botoes
+    cmp     byte[sensor],0      ; se ler obstruido continua descendo
+    je      buraco_ajusta4
+    xor     al,al
+    jmp     loop_ajusta
+    buraco_ajusta4:             ; se ler buraco 10 vezes para o motor no 4 andar
+    inc     al
+    xor     ah,ah
+    cmp     al,10
+    jb      loop_ajusta
+    call    parar
+    ; retorno
+    popf
+    pop     ax
+    ret
+; ##### fim_ajusta_4andar #####
+
+; ***** ajusta_andar *****
+; verifica se esta subindo ou descendo e decrementa ou incrementa o andar
+; se sensor mudar de 0 para 1 e estiver descendo, decrementa o andar
+; se sensor mudar de 1 para 0 e estiver subindo, incrementa o andar
+; call ajusta_andar
+ajusta_andar:
+    push    ax
+    pushf
+    call    ler_sensor_botoes
+    cmp     byte[motoracao],2   ; verifica se esta descendo
+    je      descendo_ajusta
+    cmp     byte[motoracao],1   ; se não esta descendo, verifica se esta subindo
+    jne     retorno_ajusta_curto        ; se não esta descendo nem subindo (parado), apenas sai da funcao
+    ; se esta subindo:
+    cmp     byte[sensor],0
+    jne     verifica_obstruido
+    cmp     byte[cont_obstruido],10
+    jb      retorno_ajusta_curto
+    ; se contou 10 ou mais obstruidos (1 com debounce), incrementa conta_buraco para contar 10 buracos (0 com debounce)
+    mov     al,byte[cont_buraco]
+    inc     al
+    mov     byte[cont_buraco],al
+    cmp     byte[cont_buraco],10
+    jb      retorno_ajusta_curto
+    ; como esta subindo e foi verificada transição de 1 para 0, incrementa o andar
+    mov     al,byte[andar_atual]
+    inc     al
+    mov     byte[andar_atual],al
+    mov     byte[cont_obstruido],0  ; zerar cont_obstruido
+    jmp     retorno_ajusta
+    ; se esta subindo e com sensor obstruido, conta 11 obstruidos (1 com debounce)
+    verifica_obstruido:
+    cmp     byte[cont_obstruido],10
+    ja      retorno_ajusta_curto
+    mov     al,byte[cont_obstruido]
+    inc     al
+    mov     byte[cont_obstruido],al
+    retorno_ajusta_curto:
+    jmp     retorno_ajusta
+    ; se esta descendo:
+    descendo_ajusta:
+    cmp     byte[sensor],0
+    je      verifica_buraco
+    cmp     byte[cont_buraco],10
+    jb      retorno_ajusta_curto
+    ; se contou 10 ou mais buracos (0 com debounce), incrementa cont_obstruidos para contar 10 obstruidos (1 com debounce)
+    mov     al,byte[cont_obstruido]
+    inc     al
+    mov     byte[cont_obstruido],al
+    cmp     byte[cont_obstruido],10
+    jb      retorno_ajusta_curto
+    ; como esta descendo e foi verificada transição de 0 para 1, decrementa o andar
+    mov     al,byte[andar_atual]
+    dec     al
+    mov     byte[andar_atual],al
+    mov     byte[cont_buraco],0     ; zerar cont_buraco
+    jmp     retorno_ajusta
+    ; se esta descendo e com sensor no buraco, conta 11 buracos (0 com debounce)
+    verifica_buraco:
+    cmp     byte[cont_buraco],10
+    ja      retorno_ajusta
+    mov     al,byte[cont_buraco]
+    inc     al
+    mov     byte[cont_buraco],al
+    ; retorno
+    retorno_ajusta:
+    popf
+    pop     ax
+    ret
+; ##### fim_ajusta_andar #####
 
 ; --------------- Segmento de Dados ---------------
 segment data
@@ -1144,31 +1203,31 @@ motoracao       db      0
 andar_atual     db      5
 andar_anterior  db      4
 andar_desejado  db      4
-entrada         db      00000000b   ; valores lidos da porta 319h (bit 6 é o sensor)
-sensor_old      db      0           ; 0 -> buraco, 1 -> ostruido
-sensor_new      db      0
 ; --------------- Variáveis de mensagens ---------------
-str_apertaespaco db     'Aperte ESPACO no quarto andar','$'
-str_calibrando  db      'Calibrando elevador...','$'
-str_nomebruno   db      'Nome: Bruno Teixeira Jeveaux','$'
-str_nomelaila   db      'Nome: Laila Sindra Ribeiro','$'
-str_parasair    db      'Para sair do programa, pressione Q','$'
-str_projetofinal db     'Projeto Final de Sistemas Embarcados 2018-1','$'
-str_andar_atual db      'Andar atual: ','$'
+str_apertaespaco    db     'Aperte ESPACO no quarto andar','$'
+str_calibrando      db      'Calibrando elevador...','$'
+str_nomebruno       db      'Nome: Bruno Teixeira Jeveaux','$'
+str_nomelaila       db      'Nome: Laila Sindra Ribeiro','$'
+str_parasair        db      'Para sair do programa, pressione Q','$'
+str_projetofinal    db     'Projeto Final de Sistemas Embarcados 2018-1','$'
+str_andar_atual     db      'Andar atual: ','$'
 str_estado_elevador db  'Estado do elevador: ','$'
-str_modo_operacao db    'Modo de operacao: ','$'
-str_chamadas    db      'Chamadas','$'
-str_internas    db      'INTERNAS','$'
-str_externas    db      'EXTERNAS','$'
-str_parado      db      'Parado','$'
-str_subindo     db      'Subindo','$'
-str_descendo    db      'Descendo','$'
-str_funcionando db      'Funcionando','$'
-str_emergencia  db      'Emergencia','$'
+str_modo_operacao   db    'Modo de operacao: ','$'
+str_chamadas        db      'Chamadas','$'
+str_internas        db      'INTERNAS','$'
+str_externas        db      'EXTERNAS','$'
+str_parado          db      'Parado','$'
+str_subindo         db      'Subindo','$'
+str_descendo        db      'Descendo','$'
+str_funcionando     db      'Funcionando','$'
+str_emergencia      db      'Emergencia','$'
 ptr_str_estado_anterior dw str_parado
-ptr_str_modo_anterior dw str_funcionando
-; --------------- Leitura dos sensores e atuadores ---------------
-
+ptr_str_modo_anterior   dw str_funcionando
+; --------------- Leitura dos sensores e botões ---------------
+entrada         db      00000000b   ; valores lidos da porta 319h (bit 6 é o sensor)
+sensor          db      0           ; 0 -> buraco, 1 -> ostruido
+cont_buraco     db      0           ; conta numero de buracos
+cont_obstruido  db      0           ; conta numero de obstruidos
 
 
 ; --------------- flags ---------------
