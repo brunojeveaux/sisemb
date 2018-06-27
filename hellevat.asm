@@ -1325,7 +1325,6 @@ atualiza_fila:
     set_quatro:
     mov     byte[andar_desejado],4
     jmp     fim_atualiza
-    jmp     verifica_descendo_subindo
     aux_muda_direcao:
     mov     byte[direcao_movimento],1
     verifica_descendo_subindo:
@@ -1351,14 +1350,16 @@ atualiza_fila:
     jmp     fim_atualiza ; terceiro andar é mais prioritário que o quarto
     verifica_ci_quatro:
     test    byte[flag_interna],8
-    jz      fim_atualiza        ; se não há pedidos e deu jz aqui, então deu erro??
+    jz      atende_menor_abaixo_da_atual        ; se não há pedidos e deu jz aqui, então deu erro??
     cmp     byte[andar_atual],4
     jae      atende_menor_abaixo_da_atual ; na subida tem que ser above equal, pois na subida o andar atual = 4 significa que ele está no quarto andar! (mudar sentido de movimento?)
     ; se está abaixo então atende
     mov     byte[andar_desejado],4 ; acho que não precisa... pois se ele tá acima do terceiro andar e subindo, já tá indo pro quarto andar. mas tá feito
     jmp     fim_atualiza ; termina verificação de subida para chamadas internas
-
+    jcurto_muda_direcao:
+    jmp     aux_muda_direcao
     atende_menor_abaixo_da_atual:
+    mov     byte[direcao_movimento],2
     ; se chegou aqui, então a direção é de descida. o novo andar desejado é igual ao menor das chamadas internas abaixo da atual (mais próximo abaixo)
     ; nao faz sentido testar o quarto andar, pois se o elevador está descendo e foi chamado o quarto andar, não pode subir no meio do caminho para o terceiro andar
     ; testa, então, o terceiro andar:
@@ -1379,12 +1380,12 @@ atualiza_fila:
     jmp     fim_atualiza ; segundo andar é mais prioritário que o primeiro
     verifica_ci_descida_um:
     test    byte[flag_interna],1
-    jz      fim_atualiza        ; se não há pedidos e deu jz aqui, deu algum erro!
+    jz      jcurto_muda_direcao        ; se não há pedidos e deu jz aqui, deu algum erro!
     cmp     byte[andar_atual],1
     jb      fim_atualiza ; na descida tem que ser below, pois na descida o andar atual = 1 significa que ele já tá indo pro primeiro! (mudar sentido de movimento?)
     ; se está acima então atende
     mov     byte[andar_desejado],1 ; acho que não precisa, pois ele já tá indo pro primeiro andar. mas tá feito
-    jmp     aux_muda_direcao ; termina verificação de subida para chamadas internas
+    jmp     fim_atualiza ; termina verificação de subida para chamadas internas
     verifica_ce:
     mov     byte[direcao_movimento],0
     ; por enquanto significa que n tem mais chamadas
