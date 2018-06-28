@@ -4,6 +4,7 @@ coo_seta_int_4  dw		444,404,'$'
 coo_seta_int_3 	dw		444,362,'$'
 coo_seta_int_2  dw		444,270,'$'
 coo_seta_int_1 	dw		444,168,'$'
+flag_interna_old db		00000000b	; guarda as anteriores para não pintar toda hora.
 
 
 ; ***** atualiza_menu *****
