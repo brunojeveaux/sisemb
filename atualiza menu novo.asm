@@ -6,7 +6,6 @@ coo_seta_int_2  dw		444,270,'$'
 coo_seta_int_1 	dw		444,168,'$'
 flag_interna_old db		00000000b	; guarda as anteriores para não pintar toda hora.
 
-
 ; ***** atualiza_menu *****
 ; essa função atualiza o menu. Para utilizar a função, faça:
 ; call atualiza_menu
@@ -83,8 +82,8 @@ atualiza_menu:
 	testa_seta_quatro:
 	mov		bh,ah
 	mov		bl,al
-	and		bh,00000010b
-	and		bl,00000010b
+	and		bh,00001000b
+	and		bl,00001000b
 	cmp 	bl,bh
 	je		testa_seta_externa
 	mov 	byte[cor],vermelho
@@ -98,9 +97,8 @@ atualiza_menu:
 	mov		dx,1
 	call	pinta_seta
 	pop		ax
-	mov		byte[flag_interna_old],al
 	testa_seta_externa:
-	
+	mov		byte[flag_interna_old],al	
 ; mov ax,coordenada_x
 ; mov bx,coordenada_y ; essas coordenadas são da pontinha da seta
 ; mov dx,DIRECAO
