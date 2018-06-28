@@ -25,7 +25,7 @@ atualiza_menu:
     push    di
 	jmp		testa_seta_interna
 	continua_atualiza_curto:
-	jmp 	continua_atualiza
+	jmp 	continua_atualiza_2
 	testa_seta_interna:
 	; verifica se deve pintar alguma seta interna
 	mov 	ah,byte[flag_interna_old]
@@ -107,9 +107,9 @@ atualiza_menu:
 	pop		ax
 	testa_seta_externa: 	
 	mov		byte[flag_interna_old],al
-	jmp 	testa_seta_externa_2:
+	jmp 	testa_seta_externa_2
 	continua_atualiza_curto_2:
-	jmp 	continua_atualiza
+	jmp 	continua_atualiza_2
 	testa_seta_externa_2:
 	; verifica se deve pintar alguma seta externa
 	mov 	ah,byte[flag_externa_old]
@@ -228,7 +228,14 @@ atualiza_menu:
 	call	pinta_seta
 	pop		ax
 continua_atualiza:
-	mov		byte[flag_externa_old],al	
+	mov		byte[flag_externa_old],al
+	; atualiza o estado dos leds
+	mov		bl,byte[motoreleds]
+	and		bl,11000000b
+	or		bl,al
+	mov 	dx,318h
+	out		dx,bl
+continua_atualiza_2:
     ; LIMPA ANDAR ANTERIOR
     mov     al,byte[andar_anterior]
     cmp     al,byte[andar_atual]
