@@ -1,4 +1,10 @@
 BRUUUNO, atualiza_menu, pintando setas internas.
+no data segment:::
+coo_seta_int_4  dw		444,404,'$'
+coo_seta_int_3 	dw		444,362,'$'
+coo_seta_int_2  dw		444,270,'$'
+coo_seta_int_1 	dw		444,168,'$'
+
 
 ; ***** atualiza_menu *****
 ; essa função atualiza o menu. Para utilizar a função, faça:
