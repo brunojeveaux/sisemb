@@ -73,8 +73,12 @@ loop_teste:
     mov     byte[direcao_movimento],0 ; se não há pedidos, agora tá parado
     chama_delay:
     call    atualiza_menu
-    ; ABRIR A PORTA (LIGAR O LED) E ESPERAR UM POUCO
+    mov     al,00000001b
+    mov     dx,319h
+    out     dx,al           ; acende led interno
     call    delay
+    mov     al,0
+    out     dx,al           ; apaga led interno
     cmp     byte[vai_subir],1
     jne     verifica_se_vai_descer
     mov     byte[direcao_movimento],1
@@ -83,8 +87,6 @@ loop_teste:
     cmp     byte[vai_descer],1
     jne     end_loop_teste
     mov     byte[direcao_movimento],2
-    ; PINTAR AS SETAS DE NOVO
-    ; DESLIGAR OS LEDS
     end_loop_teste:
     mov     byte[vai_subir],0
     mov     byte[vai_descer],0
@@ -1179,12 +1181,6 @@ atualiza_menu:
     pop     ax
 continua_atualiza:
     mov     byte[flag_externa_old],al
-    ; atualiza o estado dos leds
-    mov     bl,byte[motoreleds]
-    and     bl,11000000b
-    or      al,bl
-    mov     dx,318h
-    out     dx,al
 continua_atualiza_2:
     ; LIMPA ANDAR ANTERIOR
     mov     al,byte[andar_anterior]
@@ -1319,7 +1315,7 @@ move_motor:
 ; ##### fim_move_motor #####
 
 ; ***** ler_sensor *****
-; Diz se o sensor de andar estava em buraco ou obstruido com debounce (ler 20 vezes seguidas o mesmo valor)
+; Diz se o sensor de andar estava em buraco ou obstruido com debounce (ler 40 vezes seguidas o mesmo valor)
 ; call ler_sensor
 ler_sensor:
     push    ax
@@ -1327,7 +1323,7 @@ ler_sensor:
     push    dx
     pushf
     xor     ah,ah
-    mov     cx,20
+    mov     cx,40
     mov     dx,319h
     loop_leitura:
     mov     byte[sensor],ah         ; salva o último valor lido em sensor (no primeiro loop salva 0, mas não tem problema)
@@ -1339,7 +1335,7 @@ ler_sensor:
     continua_ler_sensor:
     cmp     byte[sensor],ah
     je      leitura_igual
-    mov     cx,20                   ; se a leitura não for igual 20 vezes seguidas, le de novo
+    mov     cx,40                   ; se a leitura não for igual 40 vezes seguidas, le de novo
     jmp     loop_leitura
     leitura_igual:
     dec     cx
@@ -1421,8 +1417,8 @@ ler_botoes:
     pushf
     mov     cx,20
     mov     ah,0
+	mov 	dx,319h
     debouncer_le_botoes:
-    mov     dx,319h
     in      al,dx
     cmp     ah,al
     je      continua_deb_botoes
@@ -1658,7 +1654,6 @@ atualiza_fila:
     jb      verifica_ce ; na descida tem que ser below, pois na descida o andar atual = 1 significa que ele já tá indo pro primeiro! (mudar sentido de movimento?)
     ; se está acima então atende
     mov     byte[andar_desejado],1 ; acho que não precisa, pois ele já tá indo pro primeiro andar. mas tá feito
-    jmp     verifica_ce ; termina verificação de subida para chamadas internas
     verifica_ce:
     
 
@@ -1779,21 +1774,21 @@ atualiza_fila:
     ret
 ; ##### fim_atualiza_fila #####
 
-delay: ; 
-    push cx
-    ; mov cx, 03000h ; Carrega “velocidade” em cx (contador para loop)  <- velocidade para apresentação do projeto
-    mov cx, 01010h ; <- velocidade para testes
+; ***** delay *****
+; delay para abertura da porta do elevador
+delay:
+    push 	cx
+    mov 	cx,01010h ; <- velocidade para testes
     del2:
-    push cx
-    mov cx, 0FFFFh
+    push 	cx
+    mov 	cx,0FFFFh
     del1:
-    ;call ler_botoes
-    loop del1
-    pop cx 
-    loop del2 
-    pop cx
+    loop 	del1
+    pop 	cx 
+    loop 	del2 
+    pop 	cx
     ret
-
+;
 ; --------------- Segmento de Dados ---------------
 segment data
 ; --------------- Variáveis para desenhar ---------------
@@ -1846,17 +1841,17 @@ andar_desejado  db      4
 mov_anterior    db      0           ; indica sentido de movimento do elevador 0 parado; 1 subindo; 2 descendo, sendo que se parar pra atender um andar, mas ainda tiver pedidos, não é considerado parado.
 direcao_movimento db    0
 vai_subir       db      0
-vai_descer       db      0
+vai_descer      db      0
 ; --------------- Variáveis de mensagens ---------------
-str_apertaespaco    db     'Aperte ESPACO no quarto andar','$'
+str_apertaespaco    db     	'Aperte ESPACO no quarto andar','$'
 str_calibrando      db      'Calibrando elevador...','$'
 str_nomebruno       db      'Nome: Bruno Teixeira Jeveaux','$'
 str_nomelaila       db      'Nome: Laila Sindra Ribeiro','$'
 str_parasair        db      'Para sair do programa, pressione Q','$'
-str_projetofinal    db     'Projeto Final de Sistemas Embarcados 2018-1','$'
+str_projetofinal    db     	'Projeto Final de Sistemas Embarcados 2018-1','$'
 str_andar_atual     db      'Andar atual: ','$'
-str_estado_elevador db  'Estado do elevador: ','$'
-str_modo_operacao   db    'Modo de operacao: ','$'
+str_estado_elevador db  	'Estado do elevador: ','$'
+str_modo_operacao   db    	'Modo de operacao: ','$'
 str_chamadas        db      'Chamadas','$'
 str_internas        db      'INTERNAS','$'
 str_externas        db      'EXTERNAS','$'
