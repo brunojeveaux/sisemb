@@ -269,7 +269,6 @@ inttec:
     je      tecla_quatro
     jmp     sai_inttec
     tecla_esc:
-    mov     byte[flag_externa],0 ; para efeito de teste
     test    byte[flag_emergencia],1
     jz      modo_emergencia
     mov     byte[flag_emergencia],0 ; se estava em emergência, agora não está mais
