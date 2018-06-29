@@ -1,0 +1,76 @@
+SÓ SUBSITITUIR A ZERA_FLAGS QUE ESTÁ LÁ
+
+; ***** zera_flags *****
+; verifica quais chamadas atendeu
+; call zera_flags
+zera_flags:
+    push    ax
+    push    bx
+    pushf
+    cmp     byte[andar_atual],1
+    jne     testa_andar_2
+    mov     al,11111110b
+    mov     bl,11111110b
+    jmp     zera_chamadas
+testa_andar_2:
+    cmp     byte[andar_atual],2
+    jne     testa_andar_3
+    mov     al,11111101b
+    mov     bh,byte[flag_externa]
+    mov     bl,11111001b ; zera as duas flags do segundo andar para calcular o novo andar desejado
+    and     byte[flag_externa],bl
+    call    atualiza_fila ; atualiza fila para saber se o elevador vai subir ou descer
+    mov     bh,byte[andar_desejado]
+    cmp     bh,byte[andar_atual]
+    ja      zera_2_bsubida ; se o andar desejado está acima do atual, então o elevador vai subir... então zera botão de subida
+    jb      zera_2_bdescida; se o andar desejado está abaixo do atual, então o elevador vai descer... então zera botão de descida
+    ; se chegou aqui, então o elevador não tinha chamadas além dessa atual... zera os dois botões!
+    mov     bl,11111001b ; zera as duas flags do segundo andar
+    jmp     zera_chamadas
+    zera_2_bsubida:
+	mov		bl,byte[flag_externa_old]
+    mov     bl,11111011b ; zera flag de subida
+    mov     byte[vai_subir],1
+    jmp     zera_chamadas
+    zera_2_bdescida:
+	mov		bl,byte[flag_externa_old]
+    mov     bl,11111101b ; zera flag de descida
+    mov     byte[vai_descer],1
+    jmp     zera_chamadas
+testa_andar_3:
+    cmp     byte[andar_atual],3
+    jne     testa_andar_4
+    mov     al,11111011b
+    mov     bh,byte[flag_externa]
+    mov     bl,11100111b ; zera as duas flags do terceiro andar para calcular o novo andar desejado
+    and     byte[flag_externa],bl
+    call    atualiza_fila ; atualiza fila para saber se o elevador vai subir ou descer
+    mov     byte[flag_externa],bh
+    mov     bh,byte[andar_desejado]
+    cmp     bh,byte[andar_atual]
+    ja      zera_3_bsubida ; se o andar desejado está acima do atual, então o elevador vai subir... então zera botão de subida
+    jb      zera_3_bdescida; se o andar desejado está abaixo do atual, então o elevador vai descer... então zera botão de descida
+    ; se chegou aqui, então o elevador não tinha chamadas além dessa atual... zera os dois botões!
+    mov     bl,11100111b ; zera as duas flags do terceiro andar
+    jmp     zera_chamadas
+    zera_3_bsubida:
+	mov		bl,byte[flag_externa_old]
+    mov     bl,11101111b ; zera flag de subida
+    mov     byte[vai_subir],1
+    jmp     zera_chamadas
+    zera_3_bdescida:
+	mov		bl,byte[flag_externa_old]
+    mov     bl,11110111b ; zera flag de descida
+    mov     byte[vai_descer],1
+    jmp     zera_chamadas
+testa_andar_4:  
+    mov     al,11110111b
+    mov     bl,11011111b
+zera_chamadas:
+    and     byte[flag_interna],al
+    and     byte[flag_externa],bl
+    popf
+    pop     bx
+    pop     ax
+    ret
+; ##### end_zera_flags #####
