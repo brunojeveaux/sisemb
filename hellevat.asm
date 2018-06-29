@@ -52,8 +52,6 @@ loop_teste:
     call    verifica_pedido
     cmp     byte[flag_pedidos],1
     jne     loop_teste  ; se não tiver pedidos, continua verificando
-    ; PINTAR AS SETAS               ; TALVEZ UMA FUNÇÃO QUE VERIFICA QUAIS BITS ESTÃO SETTADOS NO VETOR DE FLAG
-    ; ACENDER OS LEDS DOS BOTOES    ; TALVEZ UMA FUNÇÃO QUE VERIFICA QUAIS BITS ESTÃO SETTADOS NO VETOR DE FLAG
     call    atualiza_fila  ; se tiver, atualiza fila
     call    atende_pedidos ; move o motor
     call    ajusta_andar  ; lê sensor e ajusta o andar atual
@@ -976,14 +974,14 @@ atualiza_menu:
     push    dx
     push    di
     jmp     testa_seta_interna
-    continua_atualiza_curto:
-    jmp     continua_atualiza_2
+    testa_seta_externa_curto:
+    jmp     testa_seta_externa_2
     testa_seta_interna:
     ; verifica se deve pintar alguma seta interna
     mov     ah,byte[flag_interna_old]
     mov     al,byte[flag_interna]
     cmp     ah,al
-    je      continua_atualiza_curto
+    je      testa_seta_externa_curto
     ; testa se deve pintar a primeira seta interna
     mov     bh,ah
     mov     bl,al
