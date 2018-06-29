@@ -30,50 +30,174 @@ segment code
     mov     ah,0
     int     10h
 ; calibração
+    mov     dx,319h
+    mov     al,0
+    out     dx,al
     call    desenha_calibrando
     call    subir
 espera:
     call    verifica_tecsaida
     cmp     byte[flag_espaco],1
     jne     espera
-    call    descer
-ajusta_4andar:
     call    verifica_tecsaida
-
-
-
-
-    ; CONCERTAR LER SENSOR
-
-
-
-    mov     ax,'0'
-    mov     dh,10
-    mov     dl,20
-    call cursor
-    add     al,byte[andar_atual]
-    call caracter
-    cmp     byte[andar_atual],4
-    jne     ajusta_4andar
+    call    ajusta_4andar
     mov     byte[flag_calibrando],0
-    call    parar
 ; deixa o fundo preto
     call    background
     call    desenha_menu
-;    mov    byte[andar_atual],4
-    call    atualiza_menu
+    mov     byte[andar_atual],4
 loop_teste:
-    call    verifica_tecsaida
     call    atualiza_menu
+    test    byte[flag_emergencia],1
+    jnz     trata_emergencia
+    jmp     continua_loop_teste
+    trata_emergencia:   ; fica aqui enquanto não sair da emergencia
+    call    parar                       ; para o motor
+    test    byte[flag_emergencia],1
+    jnz     trata_emergencia
+    cmp     byte[direcao_movimento],0   ; se o motor estava parado mesmo, apenas segue o loop
+    je      continua_loop_teste
+    cmp     byte[direcao_movimento],1   ; se o motor estava subindo, manda subir e segue o loop
+    jne     continua_sai_emergencia
+    call    subir                       
+    jmp     continua_loop_teste
+    continua_sai_emergencia:
+    call    descer                      ; se o motor estava descendo, manda descer e segue o loop
+    continua_loop_teste:
+
+    call    ler_botoes
+    call    verifica_pedido
+    cmp     byte[flag_pedidos],1
+    jne     loop_teste  ; se não tiver pedidos, continua verificando
+    call    atualiza_fila  ; se tiver, atualiza fila
+    call    atende_pedidos ; move o motor
+    call    ajusta_andar  ; lê sensor e ajusta o andar atual
+    mov     al,byte[andar_atual]
+    cmp     al,byte[andar_desejado] ; verifica se chegou no andar desejado
+    jne     loop_teste   ; se não chegou no andar desejado, repete todo o procedimento
+    cmp     byte[sensor],0
+    jne     loop_teste
+    ; chegou no andar desejado
+    call    parar ; para o motor
+    mov     byte[mov_anterior],0
+    call    zera_flags ; zera as flags (interna e externa) de pedidos do andar específico
+    call    ler_botoes
+    call    reseta_direcoes ; tem que ser antes de verifica_pedido
+    call    verifica_pedido
+    cmp     byte[flag_pedidos],0
+    jne     chama_delay
+    mov     byte[direcao_movimento],0 ; se não há pedidos, agora tá parado
+    chama_delay:
+    call    atualiza_menu
+    mov     al,00000001b
+    mov     dx,319h
+    out     dx,al           ; acende led interno
+    call    delay
+    mov     al,0
+    out     dx,al           ; apaga led interno
+    cmp     byte[vai_subir],1
+    jne     verifica_se_vai_descer
+    mov     byte[direcao_movimento],1
+    jmp     end_loop_teste
+    verifica_se_vai_descer:
+    cmp     byte[vai_descer],1
+    jne     end_loop_teste
+    mov     byte[direcao_movimento],2
+    end_loop_teste:
+    mov     byte[vai_subir],0
+    mov     byte[vai_descer],0
     jmp     loop_teste
+    
+    
+    
+reseta_direcoes:
+    cmp     byte[andar_atual],1
+    jne     continua_verifica_4_andar
+    mov     byte[direcao_movimento],1
+    jmp     fim_reseta_direcoes
+    continua_verifica_4_andar:
+    cmp     byte[andar_atual],4
+    jne     continua_verifica_2_andar
+    mov     byte[direcao_movimento],2
+    jmp     fim_reseta_direcoes
+    fim_reseta_direcoes_jump_curto:
+    jmp     fim_reseta_direcoes
+    continua_verifica_2_andar:
+    cmp     byte[andar_atual],2
+    jne     continua_verifica_3_andar
+    cmp     byte[direcao_movimento],1
+    je      verifica_se_ha_pedidos_acima_2
+    ; se chegou aqui então ele tá descendo, tem que verificar se tem algum pedido abaixo do atual
+    test    byte[flag_interna],00000001b
+    jnz      fim_reseta_direcoes_jump_curto
+    test    byte[flag_externa],00000001b
+    jnz      fim_reseta_direcoes_jump_curto
+    ; se não tiver nenhum pedido abaixo do andar atual, então tem que verificar se tem algum pedido acima (para que haja mudança de direção)
+    test    byte[flag_interna],00001100b
+    jnz      muda_se_ha_ce_acima_2
+    test    byte[flag_externa],00111000b
+    jz      fim_reseta_direcoes_jump_curto
+    ; se chegou aqui, então o elevador estava descendo, não há pedidos abaixo do andar atual mas há pedidos acima, então tem que mudar de direção
+    muda_se_ha_ce_acima_2:
+    mov     byte[direcao_movimento],1
+    jmp     fim_reseta_direcoes
+    verifica_se_ha_pedidos_acima_2:
+    ; se chegou aqui, então ele tá subindo, tem que verificar se tem algum pedido acima do atual
+    test    byte[flag_interna],00001100b
+    jnz      fim_reseta_direcoes
+    test    byte[flag_externa],00111000b
+    jnz      fim_reseta_direcoes
+    ; se não tiver nenhum pedido acima do andar atual, então tem que verificar se tem algum pedido abaixo (para que haja mudança de direção)
+    test    byte[flag_interna],00000001b
+    jnz      muda_se_ha_ce_abaixo_2
+    test    byte[flag_externa],00000001b
+    jz      fim_reseta_direcoes
+    ; se chegou aqui, então o elevador estava subindo, não há pedidos acima do andar atual mas há pedidos abaixo, então tem que mudar de direção
+    muda_se_ha_ce_abaixo_2:
+    mov     byte[direcao_movimento],2
+    jmp     fim_reseta_direcoes
 
+    continua_verifica_3_andar:
+    cmp     byte[andar_atual],3
+    jne     fim_reseta_direcoes
+    cmp     byte[direcao_movimento],1
+    je      verifica_se_ha_pedidos_acima_3
+    ; se chegou aqui então ele tá descendo, tem que verificar se tem algum pedido abaixo do atual
+    test    byte[flag_interna],00000011b
+    jnz      fim_reseta_direcoes
+    test    byte[flag_externa],00000111b
+    jnz      fim_reseta_direcoes
+    ; se não tiver nenhum pedido abaixo do andar atual, então tem que verificar se tem algum pedido acima (para que haja mudança de direção)
+    test    byte[flag_interna],00001000b
+    jnz      muda_se_ha_ce_acima_3
+    test    byte[flag_externa],00100000b
+    jz      fim_reseta_direcoes
+    ; se chegou aqui, então o elevador estava descendo, não há pedidos abaixo do andar atual mas há pedidos acima, então tem que mudar de direção
+    muda_se_ha_ce_acima_3:
+    mov     byte[direcao_movimento],1
+    jmp     fim_reseta_direcoes
+    verifica_se_ha_pedidos_acima_3:
+    ; se chegou aqui, então ele tá subindo, tem que verificar se tem algum pedido acima do atual
+    test    byte[flag_interna],00001000b
+    jnz      fim_reseta_direcoes
+    test    byte[flag_externa],00100000b
+    jnz      fim_reseta_direcoes
+    ; se não tiver nenhum pedido acima do andar atual, então tem que verificar se tem algum pedido abaixo (para que haja mudança de direção)
+    test    byte[flag_interna],00000011b
+    jnz     muda_se_ha_ce_abaixo_3
+    test    byte[flag_externa],00000111b
+    jz      fim_reseta_direcoes
+    ; se chegou aqui, então o elevador estava subindo, não há pedidos acima do andar atual mas há pedidos abaixo, então tem que mudar de direção
+    muda_se_ha_ce_abaixo_3:
+    mov     byte[direcao_movimento],2
+    jmp     fim_reseta_direcoes
 
-
-
-
-
+    fim_reseta_direcoes:
+    ret
+    
 ; saída do programa
 sai:
+    call    parar
     mov     ah,0                ; set video mode
     mov     al,[modo_anterior]  ; modo anterior
     int     10h
@@ -107,6 +231,10 @@ inttec:
     je      set_saida
     jmp     continua_inttec
     set_saida:
+    pop     ax
+    pop     ax
+    pop     ax
+    jmp     sai
     mov     byte[flag_saida],1
     jmp     sai_inttec
     continua_inttec:
@@ -121,6 +249,8 @@ inttec:
     verifica_numeros:
     cmp     al,tec_esc        ; tecla esc
     je      tecla_esc
+    test    byte[flag_emergencia],1 ; se esta em emergencia, não armazena chamadas
+    jnz     sai_inttec
     cmp     al,byte[tec_um]         ; tecla um
     je      tecla_um
     cmp     al,byte[tec_um+1]
@@ -139,6 +269,7 @@ inttec:
     je      tecla_quatro
     jmp     sai_inttec
     tecla_esc:
+    mov     byte[flag_externa],0 ; para efeito de teste
     test    byte[flag_emergencia],1
     jz      modo_emergencia
     mov     byte[flag_emergencia],0 ; se estava em emergência, agora não está mais
@@ -147,16 +278,16 @@ inttec:
     mov     byte[flag_emergencia],1 ; se não estava em emergência, agora está
     jmp     sai_inttec
     tecla_um:
-    mov     byte[flag_um],1
+    or      byte[flag_interna],00000001b
     jmp     sai_inttec
     tecla_dois:
-    mov     byte[flag_dois],1
+    or      byte[flag_interna],00000010b
     jmp     sai_inttec
     tecla_tres:
-    mov     byte[flag_tres],1
+    or      byte[flag_interna],00000100b
     jmp     sai_inttec
     tecla_quatro:
-    mov     byte[flag_quatro],1
+    or      byte[flag_interna],00001000b
     sai_inttec:
     pop     ax
     iret
@@ -740,34 +871,34 @@ desenha_menu:
     call    cursor
     mov     di,str_andar_atual
     call    escrever
-    mov 	dh,3 ; linha
-    mov 	dl,17 ; coluna
-    call 	cursor
-    mov 	al,'0'
-    add 	al,4
-    call 	caracter
+    mov     dh,3 ; linha
+    mov     dl,17 ; coluna
+    call    cursor
+    mov     al,'0'
+    add     al,4
+    call    caracter
     ; escreve estado do elevador
     mov     dh,4
     mov     dl,4
     call    cursor
     mov     di,str_estado_elevador
     call    escrever
-    mov 	di,str_parado
-    mov 	dh,4
-    mov 	dl,24
-    call 	cursor
-    call 	escrever
+    mov     di,str_parado
+    mov     dh,4
+    mov     dl,24
+    call    cursor
+    call    escrever
     ; escreve modo_operacao
     mov     dh,5
     mov     dl,4
     call    cursor
     mov     di,str_modo_operacao
     call    escrever
-    mov 	di,str_funcionando
-    mov 	dh,5
-    mov 	dl,22
-    call	cursor
-    call 	escrever
+    mov     di,str_funcionando
+    mov     dh,5
+    mov     dl,22
+    call    cursor
+    call    escrever
     ; escreve para sair...
     mov     dh,23
     mov     dl,3
@@ -921,8 +1052,6 @@ pinta_seta_dupla_interna:
     push    cx
     push    dx
     push    di
-
-    mov     byte[cor],vermelho
     mov     dx,-1
     call    pinta_seta
     sub     bx,60
@@ -946,30 +1075,233 @@ atualiza_menu:
     push    cx
     push    dx
     push    di
+    jmp     testa_seta_interna
+    testa_seta_externa_curto:
+    jmp     testa_seta_externa_2
+    testa_seta_interna:
+    ; verifica se deve pintar alguma seta interna
+    mov     ah,byte[flag_interna_old]
+    mov     al,byte[flag_interna]
+    cmp     ah,al
+    je      testa_seta_externa_curto
+    ; testa se deve pintar a primeira seta interna
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00000001b
+    and     bl,00000001b
+    cmp     bl,bh
+    je      testa_seta_dois
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_1
+    mov     byte[cor],preto
+    continua_pinta_seta_1:
+    push    ax
+    mov     ax,[coo_seta_int_1]
+    mov     bx,[coo_seta_int_1+2]
+    mov     dx,-1
+    call    pinta_seta
+    pop     ax
+    ; testa se deve pintar a segunda seta interna
+    testa_seta_dois:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00000010b
+    and     bl,00000010b
+    cmp     bl,bh
+    je      testa_seta_tres
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_2
+    mov     byte[cor],preto
+    continua_pinta_seta_2:
+    push    ax
+    mov     ax,[coo_seta_int_2]
+    mov     bx,[coo_seta_int_2+2]
+    call    pinta_seta_dupla_interna
+    pop     ax
+    ; testa se deve pintar a terceira seta interna
+    testa_seta_tres:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00000100b
+    and     bl,00000100b
+    cmp     bl,bh
+    je      testa_seta_quatro
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_3
+    mov     byte[cor],preto
+    continua_pinta_seta_3:
+    push    ax
+    mov     ax,[coo_seta_int_3]
+    mov     bx,[coo_seta_int_3+2]
+    call    pinta_seta_dupla_interna
+    pop     ax
+    ; testa se deve pintar a quarta seta interna
+    testa_seta_quatro:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00001000b
+    and     bl,00001000b
+    cmp     bl,bh
+    je      testa_seta_externa
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_4
+    mov     byte[cor],preto
+    continua_pinta_seta_4:
+    push    ax
+    mov     ax,[coo_seta_int_4]
+    mov     bx,[coo_seta_int_4+2]
+    mov     dx,1
+    call    pinta_seta
+    pop     ax
+    testa_seta_externa:     
+    mov     byte[flag_interna_old],al
+    jmp     testa_seta_externa_2
+    continua_atualiza_curto_2:
+    jmp     continua_atualiza_2
+    testa_seta_externa_2:
+    ; verifica se deve pintar alguma seta externa
+    mov     ah,byte[flag_externa_old]
+    mov     al,byte[flag_externa]
+    cmp     ah,al
+    je      continua_atualiza_curto_2
+    ; testa se deve pintar a primeira seta externa
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00000001b
+    and     bl,00000001b
+    cmp     bl,bh
+    je      testa_seta_dois_ext
+    mov     byte[cor],azul
+    cmp     bl,0
+    jne     continua_pinta_seta_1_ext
+    mov     byte[cor],preto
+    continua_pinta_seta_1_ext:
+    push    ax
+    mov     ax,[coo_seta_ext_1]
+    mov     bx,[coo_seta_ext_1+2]
+    mov     dx,-1
+    call    pinta_seta
+    pop     ax
+    ; testa se deve pintar a segunda seta externa
+    testa_seta_dois_ext:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00000010b
+    and     bl,00000010b
+    cmp     bl,bh
+    je      testa_seta_tres_ext
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_2_ext
+    mov     byte[cor],preto
+    continua_pinta_seta_2_ext:
+    push    ax
+    mov     ax,[coo_seta_ext_2]
+    mov     bx,[coo_seta_ext_2+2]
+    mov     dx,1
+    call    pinta_seta
+    pop     ax
+    ; testa se deve pintar a terceira seta externa
+    testa_seta_tres_ext:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00000100b
+    and     bl,00000100b
+    cmp     bl,bh
+    je      testa_seta_quatro_ext
+    mov     byte[cor],azul
+    cmp     bl,0
+    jne     continua_pinta_seta_3_ext
+    mov     byte[cor],preto
+    continua_pinta_seta_3_ext:
+    push    ax
+    mov     ax,[coo_seta_ext_3]
+    mov     bx,[coo_seta_ext_3+2]
+    mov     dx,-1
+    call    pinta_seta
+    pop     ax
+    ; testa se deve pintar a quarta seta interna
+    testa_seta_quatro_ext:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00001000b
+    and     bl,00001000b
+    cmp     bl,bh
+    je      testa_seta_cinco_ext
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_4_ext
+    mov     byte[cor],preto
+    continua_pinta_seta_4_ext:
+    push    ax
+    mov     ax,[coo_seta_ext_4]
+    mov     bx,[coo_seta_ext_4+2]
+    mov     dx,1
+    call    pinta_seta
+    pop     ax
+    testa_seta_cinco_ext:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00010000b
+    and     bl,00010000b
+    cmp     bl,bh
+    je      testa_seta_seis_ext
+    mov     byte[cor],azul
+    cmp     bl,0
+    jne     continua_pinta_seta_5_ext
+    mov     byte[cor],preto
+    continua_pinta_seta_5_ext:
+    push    ax
+    mov     ax,[coo_seta_ext_5]
+    mov     bx,[coo_seta_ext_5+2]
+    mov     dx,-1
+    call    pinta_seta
+    pop     ax
+    testa_seta_seis_ext:
+    mov     bh,ah
+    mov     bl,al
+    and     bh,00100000b
+    and     bl,00100000b
+    cmp     bl,bh
+    je      continua_atualiza
+    mov     byte[cor],vermelho
+    cmp     bl,0
+    jne     continua_pinta_seta_6_ext
+    mov     byte[cor],preto
+    continua_pinta_seta_6_ext:
+    push    ax
+    mov     ax,[coo_seta_ext_6]
+    mov     bx,[coo_seta_ext_6+2]
+    mov     dx,1
+    call    pinta_seta
+    pop     ax
+continua_atualiza:
+    mov     byte[flag_externa_old],al
+continua_atualiza_2:
     ; LIMPA ANDAR ANTERIOR
+    mov     al,byte[andar_anterior]
+    cmp     al,byte[andar_atual]
+    je      checa_estado_anterior
     mov     dh,3 ; linha
     mov     dl,17 ; coluna
     call    cursor
     mov     al,'0'
     add     al,byte[andar_anterior]
     call    caracter ; quando escreve de novo ele inverte a cor (branco pra preto)
-    ; ESCREVE ANDAR ATUAL
-    ; mov   dh,3 ; linha
-    ; mov   dl,17 ; coluna
-    ; call cursor
     mov     al,'0'
     add     al,byte[andar_atual]
     call    caracter
-    ; LIMPA ESTADO DO ELEVADOR
-    mov     di,word[ptr_str_estado_anterior]
-    mov     dh,4
-    mov     dl,24
-    call    cursor
-    call    escrever
+    mov     al,byte[andar_atual]
+    mov     byte[andar_anterior],al
+checa_estado_anterior:
     ; ESCREVE ESTADO DO ELEVADOR
     xor     ah,ah
-    mov     al,byte[motoreleds]
-    shr     ax,6
+    mov     al,byte[mov_anterior]
+    ;mov     al,byte[direcao_movimento]
     cmp     al,0    ; parado
     je      escreve_parado
     cmp     al,1    ; subindo
@@ -987,31 +1319,49 @@ atualiza_menu:
     escreve_descendo:
     mov     di,str_descendo
     termina_escrever:
+    ; LIMPA ESTADO DO ELEVADOR
+    mov     ax,word[ptr_str_estado_anterior]
+    cmp     ax,di
+    je      checa_modo_elevador
+    push    di
+    mov     di,word[ptr_str_estado_anterior]
+    mov     dh,4
+    mov     dl,24
+    call    cursor
+    call    escrever
+    ; aqui escreve
+    pop     di
     mov     word[ptr_str_estado_anterior],di    
     mov     dh,4
     mov     dl,24
     call    cursor
     call    escrever
-    ; LIMPA MODO DO ELEVADOR
-    mov     di,word[ptr_str_modo_anterior]
-    mov     dh,5
-    mov     dl,22
-    call    cursor
-    call    escrever
+checa_modo_elevador:
     ; ESCREVE MODO DO ELEVADOR
     mov     di,str_funcionando
     test    byte[flag_emergencia],1
     jz      termina_atualizar
     mov     di,str_emergencia ; se der 1, significa que está em emergência
     termina_atualizar:
+    ; LIMPA MODO DO ELEVADOR
+    mov     ax,word[ptr_str_modo_anterior]
+    cmp     ax,di
+    je      retorno_atualiza_menu
+    push    di
+    mov     di,word[ptr_str_modo_anterior]
+    mov     dh,5
+    mov     dl,22
+    call    cursor
+    call    escrever
+    ; escreve o atual
+    pop     di
     mov     word[ptr_str_modo_anterior],di
-    mov dh,5
-    mov dl,22
-    call cursor
-    call escrever
-    mov al,byte[andar_atual]
-    mov byte[andar_anterior],al
+    mov     dh,5
+    mov     dl,22
+    call    cursor
+    call    escrever
     ; retorno
+retorno_atualiza_menu:
     pop     di
     pop     dx
     pop     cx
@@ -1030,6 +1380,7 @@ subir:
 
 ; ***** descer *****
 ; move motor para baixo
+; call descer
 descer:
     mov     byte[motoracao],2
     call    move_motor
@@ -1064,8 +1415,568 @@ move_motor:
     ret
 ; ##### fim_move_motor #####
 
+; ***** ler_sensor *****
+; Diz se o sensor de andar estava em buraco ou obstruido com debounce (ler 40 vezes seguidas o mesmo valor)
+; call ler_sensor
+ler_sensor:
+    push    ax
+    push    cx
+    push    dx
+    pushf
+    xor     ah,ah
+    mov     cx,40
+    mov     dx,319h
+    loop_leitura:
+    mov     byte[sensor],ah         ; salva o último valor lido em sensor (no primeiro loop salva 0, mas não tem problema)
+    in      al,dx
+    mov     ah,1
+    test    al,01000000b            ; supõe que é 1
+    jnz     continua_ler_sensor
+    mov     ah,0                    ; se for 0, coloca 0
+    continua_ler_sensor:
+    cmp     byte[sensor],ah
+    je      leitura_igual
+    mov     cx,40                   ; se a leitura não for igual 40 vezes seguidas, le de novo
+    jmp     loop_leitura
+    leitura_igual:
+    dec     cx
+    cmp     cx,0
+    jne     loop_leitura
+    sai_ler_sensor:
+    popf
+    pop     dx
+    pop     cx
+    pop     ax
+    ret
+; ##### fim_ler_sensor #####
+
+; ***** ajusta_4andar *****
+; desce enquanto o sensor estiver obstruido
+; call ajusta_4andar
+ajusta_4andar:
+    pushf
+    call    descer
+    loop_ajusta:
+    call    ler_sensor
+    cmp     byte[sensor],0      ; se ler obstruido continua descendo
+    jne     loop_ajusta
+    call    parar               ; se ler buraco, para o motor no 4 andar
+    ; retorno
+    popf
+    ret
+; ##### fim_ajusta_4andar #####
+
+; ***** ajusta_andar *****
+; verifica se esta subindo ou descendo e decrementa ou incrementa o andar
+; se sensor mudar de 0 para 1 e estiver descendo, decrementa o andar
+; se sensor mudar de 1 para 0 e estiver subindo, incrementa o andar
+; call ajusta_andar
+ajusta_andar:
+    push    ax
+    pushf
+    mov     ah,byte[sensor]     ; ah guarda a última leitura
+    call    ler_sensor          ; atualiza leitura do sensor
+    cmp     byte[motoracao],2   ; verifica se esta descendo
+    je      descendo_ajusta
+    cmp     byte[motoracao],1       ; se não esta descendo, verifica se esta subindo
+    jne     retorno_ajusta          ; se não esta descendo nem subindo (parado), apenas sai da funcao
+    ; se esta subindo:
+    cmp     ah,0                ; se esta subindo e a ultima leitura do sensor foi 1, analisa se a leitura atual foi zero. Se a ultima leitura foi zero, sai.
+    je      retorno_ajusta
+    cmp     byte[sensor],0      ; se a leitura atual for 0, incrementa andar. Se for 1 ainda, sai.
+    jne     retorno_ajusta
+    ; como esta subindo e foi verificada transição de 1 para 0, incrementa o andar
+    mov     al,byte[andar_atual]
+    inc     al
+    mov     byte[andar_atual],al
+    jmp     retorno_ajusta
+    ; se esta descendo:
+    descendo_ajusta:
+    cmp     ah,0                ; se esta descendo e a ultima leitura do sensor foi 0, analisa se a leitura atual foi 1. Se a ultima leitura foi 1, sai.
+    jne     retorno_ajusta
+    cmp     byte[sensor],0      ; se a leitura atual for 1, decrementa andar. Se for 0 ainda, sai.
+    je      retorno_ajusta
+    ; como esta descendo e foi verificada transição de 0 para 1, decrementa o andar
+    mov     al,byte[andar_atual]
+    dec     al
+    mov     byte[andar_atual],al
+    jmp     retorno_ajusta
+    ; retorno
+    retorno_ajusta:
+    popf
+    pop     ax
+    ret
+; ##### fim_ajusta_andar #####
+
+; ***** ler_botoes *****
+; le os botoes e setta flags de chamadas externas
+; call ler_botoes
+ler_botoes:
+    push    ax
+    push    cx
+    push    dx
+    pushf
+    mov     cx,30
+    mov     ah,0
+    mov     dx,319h
+    debouncer_le_botoes:
+    in      al,dx
+    cmp     ah,al
+    je      continua_deb_botoes
+    mov     ah,al
+    mov     cx,30
+    loop    debouncer_le_botoes
+    continua_deb_botoes:
+    loop    debouncer_le_botoes
+    and     al,00111111b
+    mov     dl,byte[flag_externa]
+    or      dl,al
+    mov     byte[flag_externa],dl
+    and     dl,00111111b ; aqui tem todos os leds q devem ser acesos
+    and     byte[motoreleds],11000000b ; zero os leds
+    or      byte[motoreleds],dl ; renovo os leds
+    mov     al,byte[motoreleds]
+    mov     dx,318h
+    out     dx,al
+    popf
+    pop     dx
+    pop     cx
+    pop     ax
+    ret
+; ##### fim_ler_botoes #####
+
+; ***** zera_flags *****
+; verifica quais chamadas atendeu
+; call zera_flags
+zera_flags:
+    push    ax
+    push    bx
+    pushf
+    cmp     byte[andar_atual],1
+    jne     testa_andar_2
+    mov     al,11111110b
+    mov     bl,11111110b
+    jmp     zera_chamadas
+testa_andar_2:
+    cmp     byte[andar_atual],2
+    jne     testa_andar_3
+    mov     al,11111101b
 
 
+    ; se a direção do movimento do elevador era de descida, o elevador vai zerar o led de descida de qualquer maneira, independente se há ou nao chamadas para
+    ; baixo. O led de subida só será zerado se não houver chamadas para baixo (porque significa que ele vai subir)
+    ; se a direção do movimento do elevador era de subida, o elevador vai zerar o led de subida de qualquer maneira, independente se há ou nao chamadas para cima. O led de 
+    ; descida só será zerado se não houver chamadas para cima (porque significa que ele vai descer)
+    mov     bl,11111111b;
+    cmp     byte[direcao_movimento],2
+    jne     zera_flags_verifica_subida
+    ; se chegou aqui, o elevador estava descendo
+    test    byte[flag_interna],1
+    jnz     zera_somente_descida_2
+    test    byte[flag_externa],1
+    jnz     zera_somente_descida_2
+    ; se chegou aqui, é porque não tem chamada interna e nem externa abaixo do segundo andar... entao pode zerar os dois!
+    jmp     zera_os_dois
+    zera_somente_descida_2:
+    mov     bl,11111101b
+    jmp     zera_chamadas
+
+    zera_flags_verifica_subida:
+    cmp     byte[direcao_movimento],1
+    jne     zera_chamadas
+    ; se chegou aqui, o elevador estava subindo
+    test    byte[flag_interna],00001100b
+    jnz     zera_somente_subida_2
+    test    byte[flag_externa],00111000b
+    jnz     zera_somente_subida_2
+    ; se chegou aqui, é pq nao tem chamada interna e nem externa acima do segundo andar... zera tudo!
+    jmp     zera_os_dois
+    zera_somente_subida_2:
+    mov     bl,11111011b
+    jmp     zera_chamadas
+    zera_os_dois:
+    mov     bl,11111001b ; zera as duas flags do segundo andar
+    jmp     zera_chamadas
+
+testa_andar_3:
+    cmp     byte[andar_atual],3
+    jne     testa_andar_4
+    mov     al,11111011b
+    mov     bh,byte[flag_externa]
+    mov     bl,11100111b ; zera as duas flags do terceiro andar para calcular o novo andar desejado
+    and     byte[flag_externa],bl
+    call    atualiza_fila ; atualiza fila para saber se o elevador vai subir ou descer
+    mov     byte[flag_externa],bh
+    mov     bh,byte[andar_desejado]
+    cmp     bh,byte[andar_atual]
+    ja      zera_3_bsubida ; se o andar desejado está acima do atual, então o elevador vai subir... então zera botão de subida
+    jb      zera_3_bdescida; se o andar desejado está abaixo do atual, então o elevador vai descer... então zera botão de descida
+    ; se chegou aqui, então o elevador não tinha chamadas além dessa atual... zera os dois botões!
+    mov     bl,11100111b ; zera as duas flags do terceiro andar
+    jmp     zera_chamadas
+    zera_3_bsubida:
+    mov     bl,byte[flag_externa_old]
+    mov     byte[flag_externa],bl
+    mov     bl,11101111b ; zera flag de subida
+    mov     byte[vai_subir],1
+    jmp     zera_chamadas
+    zera_3_bdescida:
+    mov     bl,byte[flag_externa_old]
+    mov     byte[flag_externa],bl
+    mov     bl,11110111b ; zera flag de descida
+    mov     byte[vai_descer],1
+    jmp     zera_chamadas
+testa_andar_4:  
+    mov     al,11110111b
+    mov     bl,11011111b
+zera_chamadas:
+    and     byte[flag_interna],al
+    and     byte[flag_externa],bl
+    popf
+    pop     bx
+    pop     ax
+    ret
+; ##### end_zera_flags #####
+
+; ***** verifica_pedido *****
+; verifica se houve algum pedido e setta a flag_pedidos
+; call verifica_pedido
+verifica_pedido:
+    test    byte[flag_interna],00001111b ; verifica se algum botão interno foi apertado
+    jnz     set_pedidos
+    test    byte[flag_externa],00111111b ; verifica se algum botão externo foi apertado
+    jnz     set_pedidos
+    mov     byte[flag_pedidos],0
+    ret
+    set_pedidos:
+    mov     byte[flag_pedidos],1
+    ret
+; ##### end_verifica_pedido #####
+
+; ***** atende_pedidos *****
+; verifica se o motor deve subir ou descer para atender um pedido e envia o movimento
+; call atende_pedidos
+atende_pedidos:
+    push    ax
+    mov     al,byte[andar_atual]
+    cmp     al,byte[andar_desejado]
+    ja      desce_motor
+    jb      sobe_motor
+    ; aqui o andar atual é igual ao andar desejado
+    jmp     fim_atende
+    desce_motor:
+    call    descer
+    mov     byte[mov_anterior],2
+    mov     byte[direcao_movimento],2
+    jmp     fim_atende
+    sobe_motor:
+    call    subir
+    mov     byte[mov_anterior],1
+    mov     byte[direcao_movimento],1
+    fim_atende:
+    pop     ax
+    ret
+; ##### fim_atende_pedidos #####
+
+; ***** atualiza_fila ***** --------> ESTA INCOMPLETA
+; analisa as flags de pedido e decide qual o andar_desejado que o elevador irá
+; call atualiza_fila
+atualiza_fila:
+    jmp     verifica_ci
+    verifica_ce_aux:
+    jmp     verifica_ce
+    verifica_ci:
+    test    byte[flag_interna],00001111b ; verifica se algum botão interno foi apertado
+    jz      verifica_ce_aux ; significa que não tem chamada interna. então verifica se há chamadas externas
+    cmp     byte[direcao_movimento],0
+    je      att_andar_des   ; se não havia chamadas anteriormente, então atende a primeira que encontrar
+    jmp     verifica_descendo_subindo ; se havia chamadas, tem que verificar se o elevador estava subindo ou descendo
+    att_andar_des:
+    test    byte[flag_interna],1
+    jnz     set_um
+    test    byte[flag_interna],2
+    jnz     set_dois
+    test    byte[flag_interna],4
+    jnz     set_tres
+    test    byte[flag_interna],8
+    jnz     set_quatro
+    jmp     fim_atualiza
+    set_um:
+    mov     byte[andar_desejado],1
+    jmp     fim_atualiza
+    set_dois:
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza
+    set_tres:
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza
+    set_quatro:
+    mov     byte[andar_desejado],4
+    jmp     fim_atualiza
+    verifica_descendo_subindo:
+    cmp     byte[direcao_movimento],1 ; verifica se a direção do elevador é de subida
+    jne     atende_menor_abaixo_da_atual ; se não está subindo, está descendo... procede lógica de descida
+    ; se chegou aqui, então a direção é de subida. o novo andar desejado é igual ao menor das chamadas internas acima da atual
+    ; nao faz sentido testar o primeiro andar, pois se o elevador está subindo e foi chamado o primeiro andar, não pode descer no meio do caminho para o segundo andar
+    ; testa, então, o segundo andar:
+    test    byte[flag_interna],2
+    jz      verifica_ci_tres
+    cmp     byte[andar_atual],2
+    jae      verifica_ci_tres ; na subida tem que ser above equal, pois na subida o andar atual = 2 significa que ele já passou do segundo e tá indo pro terceiro andar
+    ; se está abaixo (no primeiro andar), e há uma chamada no segundo, então atende
+    mov     byte[andar_desejado],2
+    jmp     verifica_ce ; segundo andar é mais prioritário que o terceiro e quarto
+    verifica_ci_tres:
+    test    byte[flag_interna],4
+    jz      verifica_ci_quatro
+    cmp     byte[andar_atual],3
+    jae      verifica_ci_quatro ; na subida tem que ser above equal, pois na subida o andar atual = 3 significa que ele já passou do terceiro e tá indo pro quarto andar
+    ; se está abaixo então atende
+    mov     byte[andar_desejado],3
+    jmp     verifica_ce ; terceiro andar é mais prioritário que o quarto
+    verifica_ci_quatro:
+    test    byte[flag_interna],8
+    ;jz      atende_menor_abaixo_da_atual        ; se não há pedidos e deu jz aqui, então deu erro??
+    jz      verifica_ce
+    cmp     byte[andar_atual],4
+    jae      atende_menor_abaixo_da_atual ; na subida tem que ser above equal, pois na subida o andar atual = 4 significa que ele está no quarto andar! (mudar sentido de movimento?)
+    ; se está abaixo então atende
+    mov     byte[andar_desejado],4 ; acho que não precisa... pois se ele tá acima do terceiro andar e subindo, já tá indo pro quarto andar. mas tá feito
+    jmp     verifica_ce ; termina verificação de subida para chamadas internas
+    atende_menor_abaixo_da_atual:
+    ; se chegou aqui, então a direção é de descida. o novo andar desejado é igual ao menor das chamadas internas abaixo da atual (mais próximo abaixo)
+    ; nao faz sentido testar o quarto andar, pois se o elevador está descendo e foi chamado o quarto andar, não pode subir no meio do caminho para o terceiro andar
+    ; testa, então, o terceiro andar:
+    test    byte[flag_interna],4
+    jz      verifica_ci_descida_dois
+    cmp     byte[andar_atual],3
+    jb      verifica_ci_descida_dois ; na descida tem que ser below, pois na descida o andar atual = 3 significa que ele ainda não chegou no terceiro
+    ; se está acima (no quarto andar), e há uma chamada no terceiro, então atende
+    mov     byte[andar_desejado],3
+    jmp     verifica_ce ; terceiro andar é mais prioritário que o segundo e primeiro
+    verifica_ci_descida_dois:
+    test    byte[flag_interna],2
+    jz      verifica_ci_descida_um
+    cmp     byte[andar_atual],2
+    jb      verifica_ci_descida_um ; na descida tem que ser below, pois na descida o andar atual = 2 significa que ele ainda não chegou no segundo
+    ; se está acima então atende
+    mov     byte[andar_desejado],2
+    jmp     verifica_ce ; segundo andar é mais prioritário que o primeiro
+    verifica_ci_descida_um:
+    test    byte[flag_interna],1
+    jz      verifica_ce             ; se não há pedidos e deu jz aqui, deu algum erro??
+    cmp     byte[andar_atual],1
+    jb      verifica_ce ; na descida tem que ser below, pois na descida o andar atual = 1 significa que ele já tá indo pro primeiro! (mudar sentido de movimento?)
+    ; se está acima então atende
+    mov     byte[andar_desejado],1 ; acho que não precisa, pois ele já tá indo pro primeiro andar. mas tá feito
+    verifica_ce:
+    jmp continua_verifica_ce
+    aux_fim_atualiza:
+    jmp     fim_atualiza
+    continua_verifica_ce:
+    test    byte[flag_externa],00111111b ; verifica se algum botão externo foi apertado ; ordem dos bits: X S B6 B4 B2 B5 B3 B1 <- tá errado
+    jz      aux_fim_atualiza ; significa que não tem chamada externa, então sai
+    cmp     byte[direcao_movimento],0
+    jne      verif_desc_sob   ; se não estava parado, verifica se tava subindo ou descendo
+    test    byte[flag_interna],00001111b ; verifica se algum botão interno foi apertado. há prioridade na primeira execução
+    jnz      aux_fim_atualiza   ; se havia alguma chamada interna no mesmo tempo, apenas sai e executa
+    jmp     ext_att_andar_des ; se tava parado e não havia chamada interna, entao atende a primeira externa
+    verif_desc_sob:
+    jmp     ext_verifica_descendo_subindo ; se havia chamadas, tem que verificar se o elevador estava subindo ou descendo
+    ext_att_andar_des:
+    test    byte[flag_externa],1 ; B1
+    jnz     ext_set_um
+    test    byte[flag_externa],2 ; B2
+    jnz     ext_set_dois_descendo
+    test    byte[flag_externa],4 ; B3
+    jnz     ext_set_dois_subindo
+    test    byte[flag_externa],8 ; B4
+    jnz     ext_set_tres_descendo
+    test    byte[flag_externa],16 ; B5
+    jnz     ext_set_tres_subindo
+    test    byte[flag_externa],32 ; B6
+    jnz     ext_set_quatro
+    jmp     fim_atualiza
+    ext_set_um:
+    mov     byte[andar_desejado],1
+    jmp     fim_atualiza
+    ext_set_dois_descendo:
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza
+    ext_set_dois_subindo:
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza
+    ext_set_tres_descendo:
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza
+    ext_set_tres_subindo:
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza
+    ext_set_quatro:
+    mov     byte[andar_desejado],4
+    jmp     fim_atualiza
+
+    ext_atende_menor_abaixo_da_atual_jump_curto:
+    jmp     ext_atende_menor_abaixo_da_atual
+    ext_verifica_descendo_subindo:
+    cmp     byte[direcao_movimento],1 ; verifica se a direção do elevador é de subida
+    jne     ext_atende_menor_abaixo_da_atual_jump_curto ; se não está subindo, está descendo... procede lógica de descida
+    ; se chegou aqui, então a direção é de subida. o novo andar desejado é igual ao menor das chamadas externas acima da atual e abaixo do desejado atual (interna tem prioridade)
+    ; nao faz sentido testar o primeiro andar, pois se o elevador está subindo e foi chamado o primeiro andar, não pode descer no meio do caminho para o segundo andar
+    ; testa, então, o segundo andar:
+    ;;;;;;;;; DESCIDA ;;;;;;;;;
+    cmp     byte[andar_atual],1
+    jne     ext_testa_andar_2
+    test    byte[flag_interna],00001110b
+    jnz     ext_continua_botoes_subida
+    test    byte[flag_externa],00010100b
+    jz      ext_verifica_botoes_descida
+
+    ext_testa_andar_2:
+    cmp     byte[andar_atual],2
+    jne     ext_testa_andar_3
+    test    byte[flag_interna],00001100b
+    jnz     ext_continua_botoes_subida
+    test    byte[flag_externa],00010000b
+    jz      ext_verifica_botoes_descida
+
+    ext_testa_andar_3:
+    cmp     byte[andar_atual],3
+    jne     ext_continua_botoes_subida
+    test    byte[flag_interna],00001000b
+    jnz     ext_continua_botoes_subida
+    test    byte[flag_externa],00100000b
+    jnz     ext_verifica_botoes_descida
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ext_continua_botoes_subida:
+    test    byte[flag_externa],4 ; botão de subida apenas... nao se atende descida quando está subindo
+    jz      verifica_ce_tres
+    cmp     byte[andar_atual],2
+    jae     verifica_ce_tres ; na subida tem que ser above equal, pois na subida o andar atual = 2 significa que ele já passou do segundo e tá indo pro terceiro andar
+    ; se está abaixo (no primeiro andar), e há uma chamada no segundo, então atende
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza ; segundo andar é mais prioritário que o terceiro e quarto
+    verifica_ce_tres:
+    test    byte[flag_externa],16
+    jz      verifica_ce_quatro
+    cmp     byte[andar_atual],3
+    jae     verifica_ce_quatro ; na subida tem que ser above equal, pois na subida o andar atual = 3 significa que ele já passou do terceiro e tá indo pro quarto andar
+    ; se está abaixo então atende
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza ; terceiro andar é mais prioritário que o quarto
+    verifica_ce_quatro:
+    test    byte[flag_externa],32
+    jz      fim_atualiza_jump_curto        ; se não há pedidos e deu jz aqui, então deu erro??
+    cmp     byte[andar_atual],4
+    jae     ext_atende_menor_abaixo_da_atual ; na subida tem que ser above equal, pois na subida o andar atual = 4 significa que ele está no quarto andar! (mudar sentido de movimento?)
+    ; se está abaixo então atende
+    jmp     fim_atualiza ; termina verificação de subida para chamadas internas
+    fim_atualiza_jump_curto:
+    jmp     fim_atualiza
+    ext_verifica_botoes_descida:
+    ; teoricamente, ele tá aqui se não há pedidos de subida e nem pedidos internos de subida
+    test    byte[flag_externa],00100000b ; verifica se o botão do 4 andar tá apertado
+    jz      ext_verifica_botoes_descida_andar_3
+    mov     byte[andar_desejado],4
+    jmp     fim_atualiza
+    ext_verifica_botoes_descida_andar_3:
+    test    byte[flag_externa],00001000b ; verifica se o botão do 3 andar tá apertado
+    jz      ext_verifica_botoes_descida_andar_2
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza
+    ext_verifica_botoes_descida_andar_2:
+    test    byte[flag_externa],00000010b ; verifica se o botão do 2 andar tá apertado
+    jz      fim_atualiza_jump_curto
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza
+    ext_atende_menor_abaixo_da_atual:
+    ; se chegou aqui, então a direção é de descida. o novo andar desejado é igual ao menor das chamadas externas abaixo da atual e acima do desejado atual (mais próximo abaixo)
+    ; nao faz sentido testar o quarto andar, pois se o elevador está descendo e foi chamado o quarto andar, não pode subir no meio do caminho para o terceiro andar
+    ; testa, então, o terceiro andar:
+    ;;;;;;;;; SUBIDA ;;;;;;;;;
+    cmp     byte[andar_atual],1
+    jne     ext_testa_andar_2_outro
+    test    byte[flag_interna],00000001b
+    jnz     ext_continua_botoes_descida
+    test    byte[flag_externa],00000001b
+    jnz     ext_verifica_botoes_subida
+
+    ext_testa_andar_2_outro:
+    cmp     byte[andar_atual],2
+    jne     ext_testa_andar_3_outro
+    test    byte[flag_interna],00000011b
+    jnz     ext_continua_botoes_descida
+    test    byte[flag_externa],00000010b
+    jz      ext_verifica_botoes_subida
+
+    ext_testa_andar_3_outro:
+    cmp     byte[andar_atual],3
+    jne     ext_continua_botoes_descida
+    test    byte[flag_interna],00000111b
+    jnz     ext_continua_botoes_descida
+    test    byte[flag_externa],00001010b
+    jz      ext_verifica_botoes_subida
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ext_continua_botoes_descida:
+    test    byte[flag_externa],8 ; botão de descida apenas... nao se atende subida quando o elevador está descendo
+    jz      verifica_ce_descida_dois
+    cmp     byte[andar_atual],3
+    jb      verifica_ce_descida_dois ; na descida tem que ser below, pois na descida o andar atual = 3 significa que ele ainda não chegou no terceiro
+    ; se está acima (no quarto andar), e há uma chamada no terceiro, então atende
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza ; terceiro andar é mais prioritário que o segundo e primeiro
+    verifica_ce_descida_dois:
+    test    byte[flag_externa],2
+    jz      verifica_ce_descida_um
+    cmp     byte[andar_atual],2
+    jb      verifica_ce_descida_um ; na descida tem que ser below, pois na descida o andar atual = 2 significa que ele ainda não chegou no segundo
+    ; se está acima então atende
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza ; segundo andar é mais prioritário que o primeiro
+    verifica_ce_descida_um:
+    test    byte[flag_externa],1
+    jz      fim_atualiza        ; se não há pedidos e deu jz aqui, deu algum erro!
+    cmp     byte[andar_atual],1
+    jb      fim_atualiza ; AAAAAAAAAAAA na descida tem que ser below, pois na descida o andar atual = 1 significa que ele já tá indo pro primeiro! (mudar sentido de movimento?)
+    ; se está acima então atende
+    jmp     fim_atualiza ; termina verificação de subida para chamadas internas
+    ext_verifica_botoes_subida:
+    ; teoricamente, ele tá aqui se não há pedidos de descida e nem pedidos internos de descida
+    test    byte[flag_externa],00000001b ; verifica se o botão do 1 andar tá apertado
+    jz      ext_verifica_botoes_subida_andar_2
+    mov     byte[andar_desejado],1
+    jmp     fim_atualiza
+    ext_verifica_botoes_subida_andar_2:
+    test    byte[flag_externa],00000100b ; verifica se o botão do 2 andar tá apertado
+    jz      ext_verifica_botoes_subida_andar_3
+    mov     byte[andar_desejado],2
+    jmp     fim_atualiza
+    ext_verifica_botoes_subida_andar_3:
+    test    byte[flag_externa],00010000b ; verifica se o botão do 3 andar tá apertado
+    jz      fim_atualiza
+    mov     byte[andar_desejado],3
+    jmp     fim_atualiza
+    fim_atualiza:
+    ret
+; ##### fim_atualiza_fila #####
+
+; ***** delay *****
+; delay para abertura da porta do elevador
+delay:
+    push    cx
+    mov     cx,01010h ; <- velocidade para testes
+    del2:
+    push    cx
+    mov     cx,0FFFFh
+    del1:
+    loop    del1
+    pop     cx
+    call    ler_botoes
+    call    atualiza_menu
+    loop    del2 
+    pop     cx
+    ret
+;
 ; --------------- Segmento de Dados ---------------
 segment data
 ; --------------- Variáveis para desenhar ---------------
@@ -1099,48 +2010,58 @@ deltay          dw      0
 coo_borda       dw      10,10,630,10,630,10,630,470,630,470,10,470,10,470,10,10,'$'
 coo_casinhas    dw      384,10,384,470,507,10,507,470,384,102,630,102,384,194,630,194,384,286,630,286,384,378,630,378,'$'
 coo_limpeza     dw      131,380,300,437,'$'
+coo_seta_int_4  dw      444,404,'$'
+coo_seta_int_3  dw      444,362,'$'
+coo_seta_int_2  dw      444,270,'$'
+coo_seta_int_1  dw      444,168,'$'
+coo_seta_ext_1  dw      567,168,'$'
+coo_seta_ext_2  dw      567,198,'$'
+coo_seta_ext_3  dw      567,282,'$'
+coo_seta_ext_4  dw      567,290,'$'
+coo_seta_ext_5  dw      567,374,'$'
+coo_seta_ext_6  dw      567,404,'$'
 ; --------------- Variáveis de controle --------------
 motoreleds      db      00000000b   ; bits 7 e 6 são os motores 0 0 Parado; 0 1 Sobe; 1 0 Desce; 1 1 Parado
 motoracao       db      0
-andar_atual     db      5
+andar_atual     db      4
 andar_anterior  db      4
 andar_desejado  db      4
-entrada         db      00000000b   ; valores lidos da porta 319h (bit 6 é o sensor)
-sensor_old      db      0           ; 0 -> buraco, 1 -> ostruido
-sensor_new      db      0
+mov_anterior    db      0           ; indica sentido de movimento do elevador 0 parado; 1 subindo; 2 descendo, sendo que se parar pra atender um andar, mas ainda tiver pedidos, não é considerado parado.
+direcao_movimento db    0
+vai_subir       db      0
+vai_descer      db      0
 ; --------------- Variáveis de mensagens ---------------
-str_apertaespaco 	db     'Aperte ESPACO no quarto andar','$'
-str_calibrando  	db      'Calibrando elevador...','$'
-str_nomebruno   	db      'Nome: Bruno Teixeira Jeveaux','$'
-str_nomelaila   	db      'Nome: Laila Sindra Ribeiro','$'
-str_parasair    	db      'Para sair do programa, pressione Q','$'
-str_projetofinal 	db     'Projeto Final de Sistemas Embarcados 2018-1','$'
-str_andar_atual 	db      'Andar atual: ','$'
-str_estado_elevador db  'Estado do elevador: ','$'
-str_modo_operacao 	db    'Modo de operacao: ','$'
-str_chamadas    	db      'Chamadas','$'
-str_internas    	db      'INTERNAS','$'
-str_externas    	db      'EXTERNAS','$'
-str_parado      	db      'Parado','$'
-str_subindo     	db      'Subindo','$'
-str_descendo    	db      'Descendo','$'
-str_funcionando 	db      'Funcionando','$'
-str_emergencia  	db      'Emergencia','$'
+str_apertaespaco    db      'Aperte ESPACO no quarto andar','$'
+str_calibrando      db      'Calibrando elevador...','$'
+str_nomebruno       db      'Nome: Bruno Teixeira Jeveaux','$'
+str_nomelaila       db      'Nome: Laila Sindra Ribeiro','$'
+str_parasair        db      'Para sair do programa, pressione Q','$'
+str_projetofinal    db      'Projeto Final de Sistemas Embarcados 2018-1','$'
+str_andar_atual     db      'Andar atual: ','$'
+str_estado_elevador db      'Estado do elevador: ','$'
+str_modo_operacao   db      'Modo de operacao: ','$'
+str_chamadas        db      'Chamadas','$'
+str_internas        db      'INTERNAS','$'
+str_externas        db      'EXTERNAS','$'
+str_parado          db      'Parado','$'
+str_subindo         db      'Subindo','$'
+str_descendo        db      'Descendo','$'
+str_funcionando     db      'Funcionando','$'
+str_emergencia      db      'Emergencia','$'
 ptr_str_estado_anterior dw str_parado
-ptr_str_modo_anterior 	dw str_funcionando
-; --------------- Leitura dos sensores e atuadores ---------------
-
-
-
+ptr_str_modo_anterior   dw str_funcionando
+; --------------- Leitura do sensor ---------------
+sensor          db      0           ; 0 -> buraco, 1 -> ostruido
 ; --------------- flags ---------------
 flag_calibrando db      1           ; indica que está calibrando
 flag_espaco     db      0           ; indica se apertou espaco
 flag_saida      db      0           ; indica se apertou Q
-flag_um         db      0           ; indica se apertou andar 1
-flag_dois       db      0           ; indica se apertou andar 2
-flag_tres       db      0           ; indica se apertou andar 3
-flag_quatro     db      0           ; indica se apertou andar 4
+flag_interna    db      00000000b   ; indica se apertou algum andar interno. bit 0,1,2,3 => 1,2,3,4 andar, respectivamente.
+flag_interna_old db     00000000b   ; guarda as anteriores para não pintar toda hora.
+flag_externa_old db     00000000b   ; guarda as anteriores para não pintar toda hora.
+flag_externa    db      00000000b   ; indica se apertou algum botao externo. bit 0,1,2,3,4,5 => s1,d2,s2,d3,s3,d4, respectivamente.
 flag_emergencia db      0           ; indica se está em modo emergência
+flag_pedidos    db      0           ; indica se há algum pedido
 ; --------------- Variáveis de interrupção ---------------
 int9            equ     9h
 offset_dos      resw    1
