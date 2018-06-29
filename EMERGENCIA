@@ -1,0 +1,103 @@
+COLOAR ESTA INTTEC E ADICIONAR A PARTE DE EMERGENCIA AO LOOP_TESTE
+
+inttec:
+    push    ax
+    in      al,kb_data
+    mov     byte[tecla],al
+    in      al,kb_ctl
+    or      al,80h
+    out     kb_ctl,al
+    and     al,7fh
+    out     kb_ctl,al
+    mov     al,eoi
+    out     pictrl,al
+    mov     al,byte[tecla]
+    cmp     al,tec_q                ; tecla q no teclado
+    ;je      sai
+    je      set_saida
+    jmp     continua_inttec
+    set_saida:
+    pop     ax
+    pop     ax
+    pop     ax
+    jmp     sai
+    mov     byte[flag_saida],1
+    jmp     sai_inttec
+    continua_inttec:
+    ; verifica se esta calibrando
+    test    byte[flag_calibrando],1
+    jz      verifica_numeros
+    cmp     al,tec_espaco           ; tecla espaco
+    jne     sai_inttec
+    mov     byte[flag_espaco],1
+    jmp     sai_inttec
+    ; se nao estava calibrando, verifica as teclas de numeros e botão de emergencia
+    verifica_numeros:
+    cmp     al,tec_esc        ; tecla esc
+    je      tecla_esc
+	test	byte[flag_emergencia],1	; se esta em emergencia, não armazena chamadas
+	jnz		sai_inttec
+    cmp     al,byte[tec_um]         ; tecla um
+    je      tecla_um
+    cmp     al,byte[tec_um+1]
+    je      tecla_um
+    cmp     al,byte[tec_dois]       ; tecla dois
+    je      tecla_dois
+    cmp     al,byte[tec_dois+1]
+    je      tecla_dois
+    cmp     al,byte[tec_tres]       ; tecla tres
+    je      tecla_tres
+    cmp     al,byte[tec_tres+1]
+    je      tecla_tres
+    cmp     al,byte[tec_quatro]     ; tecla quatro
+    je      tecla_quatro
+    cmp     al,byte[tec_quatro+1]
+    je      tecla_quatro
+    jmp     sai_inttec
+    tecla_esc:
+    mov     byte[flag_externa],0 ; para efeito de teste
+    test    byte[flag_emergencia],1
+    jz      modo_emergencia
+    mov     byte[flag_emergencia],0 ; se estava em emergência, agora não está mais
+    jmp     sai_inttec
+    modo_emergencia:
+    mov     byte[flag_emergencia],1 ; se não estava em emergência, agora está
+    jmp     sai_inttec
+    tecla_um:
+    or      byte[flag_interna],00000001b
+    jmp     sai_inttec
+    tecla_dois:
+    or      byte[flag_interna],00000010b
+    jmp     sai_inttec
+    tecla_tres:
+    or      byte[flag_interna],00000100b
+    jmp     sai_inttec
+    tecla_quatro:
+    or      byte[flag_interna],00001000b
+    sai_inttec:
+    pop     ax
+    iret
+    
+    
+    
+    
+    
+    
+NO LOOP_TESTE, COLOCAR ISTO ENTRE O 1o CALL ATUALIZA_MENU E O CALL LER_BOTOES:
+    
+  test 	byte[flag_emergencia],1
+	jnz		trata_emergencia
+	jmp 	continua_loop_teste
+	trata_emergencia:	; fica aqui enquanto não sair da emergencia
+	call	parar						; para o motor
+	test	byte[flag_emergencia],1
+	jnz		trata_emergencia
+	cmp		byte[direcao_movimento],0	; se o motor estava parado mesmo, apenas segue o loop
+	je		continua_loop_teste
+	cmp		byte[direcao_movimento],1	; se o motor estava subindo, manda subir e segue o loop
+	jne		continua_sai_emergencia
+	call	subir						
+	jmp		continua_loop_teste
+	continua_sai_emergencia:
+	call	descer						; se o motor estava descendo, manda descer e segue o loop
+	continua_loop_teste:
